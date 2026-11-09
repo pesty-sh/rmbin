@@ -1,0 +1,17 @@
+# Build output
+/target/
+/dist/
+/vendor/
+
+# Never publish private research or the example-app identity key.
+/private/
+/research/
+
+# Editor and OS
+.DS_Store
+*.swp
+*~
+**/*.rs.bk
+
+# MSVC debug info
+*.pdb
