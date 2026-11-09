@@ -142,7 +142,8 @@ jobs:
         shell: bash
         run: |
           set -eu
-          cargo install cargo-deb --version 3.8.0 --locked --no-default-features
+          # 3.6.0 builds with Rust 1.85. 3.8.0 does not.
+          cargo install cargo-deb --version 3.6.0 --locked --no-default-features
           cargo deb --no-build --compress-type gzip --target "${{ matrix.target }}"
           mkdir -p dist
           find target -name 'rmbin_*.deb' -exec cp {} dist/ \;

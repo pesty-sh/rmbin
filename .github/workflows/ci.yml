@@ -6,9 +6,14 @@
 
 name: CI
 
+# One run per change. A push to a pull-request branch used to start this
+# workflow twice (once for `push`, once for `pull_request`). Pull requests
+# cover feature branches. Pushes to `main` cover the result after merge.
 on:
-  push:
   pull_request:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -147,7 +152,9 @@ jobs:
           set -eu
           # --no-default-features skips cargo-deb's liblzma build.
           # Gzip is implemented in Rust inside cargo-deb (zopfli).
-          cargo install cargo-deb --version 3.8.0 --locked --no-default-features
+          # 3.6.0 is the newest cargo-deb that still builds with Rust 1.85.
+          # 3.8.0 uses let-chains, which need a newer compiler than this repo pins.
+          cargo install cargo-deb --version 3.6.0 --locked --no-default-features
           cargo deb --no-build --compress-type gzip --target "${{ matrix.target }}"
           deb=$(find target -name 'rmbin_*.deb' -print | head -n 1)
           test -n "$deb"

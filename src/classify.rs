@@ -336,12 +336,23 @@ mod tests {
         let dir = temp_dir();
         let file = dir.join("notes.txt");
         fs::write(&file, b"abc").expect("write");
-        let via = dir.join("missing").join("..").join("notes.txt");
+        // Build the path as text. On Windows, `Path::join("..")` deletes the
+        // previous component immediately, so `missing` would never be checked.
+        let mut via = dir.as_os_str().to_owned();
+        for piece in ["missing", "..", "notes.txt"] {
+            via.push(std::ffi::OsStr::new(std::path::MAIN_SEPARATOR_STR));
+            via.push(piece);
+        }
+        let via = PathBuf::from(via);
         // `missing` does not exist, so the walk stops there.
-        assert!(resolve_leaf(&via, &Guard::load()).is_err());
-        let via_real = dir.join(".").join("notes.txt");
-        let resolved = resolve_leaf(&via_real, &Guard::load()).expect("resolve");
-        assert_eq!(resolved, file);
+        assert!(resolve_leaf(&via, &Guard::load()).is_err(), "{via:?}");
+        let mut via_real = dir.as_os_str().to_owned();
+        via_real.push(std::ffi::OsStr::new(std::path::MAIN_SEPARATOR_STR));
+        via_real.push(".");
+        via_real.push(std::ffi::OsStr::new(std::path::MAIN_SEPARATOR_STR));
+        via_real.push("notes.txt");
+        let resolved = resolve_leaf(&PathBuf::from(via_real), &Guard::load()).expect("resolve");
+        assert_eq!(fs::canonicalize(&resolved).expect("canon"), file);
         let _ = fs::remove_dir_all(&dir);
     }
 

@@ -65,7 +65,7 @@ Debian names:
 | `armv7-unknown-linux-musleabihf` | armhf |
 | `i686-unknown-linux-musl` | i386 |
 
-`cargo-deb` is a packaging tool. It is not linked into `rmbin`. The install uses `--no-default-features` so that tool does not compile liblzma. Gzip compression uses the Rust gzip code in cargo-deb.
+`cargo-deb` is a packaging tool. It is not linked into `rmbin`. The workflow installs version 3.6.0 with `--no-default-features` so that tool does not compile liblzma, and so it still builds with Rust 1.85. Gzip compression uses the Rust gzip code in cargo-deb.
 
 There are no maintainer scripts. Installing the package copies `/usr/bin/rmbin`. Removing it deletes that file only.
 
