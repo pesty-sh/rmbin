@@ -34,8 +34,8 @@ A matrix is one job description repeated with different settings. Each setting i
 
 | Rust target | Runner | Archive |
 |---|---|---|
-| `x86_64-apple-darwin` | macOS Intel | `.tar.gz`, deployment target 10.12 |
-| `aarch64-apple-darwin` | macOS Apple silicon | `.tar.gz`, deployment target 11.0 |
+| `x86_64-apple-darwin` | macOS Intel | `.tar.gz`, deployment target 10.12. This same job cross-compiles the Apple silicon binary and runs `lipo` |
+| `aarch64-apple-darwin` | not a separate runner in 0.0.1 | Cross-compiled on the Intel job. Deployment target 11.0. Tests of this slice are not run on GitHub |
 | `x86_64-unknown-linux-musl` | Ubuntu x86_64 | `.tar.gz` plus `amd64` `.deb` |
 | `aarch64-unknown-linux-musl` | Ubuntu arm64 | `.tar.gz` plus `arm64` `.deb` |
 | `armv7-unknown-linux-musleabihf` | Ubuntu x86_64, cross-linked | `.tar.gz` plus `armhf` `.deb` |
@@ -71,11 +71,13 @@ There are no maintainer scripts. Installing the package copies `/usr/bin/rmbin`.
 
 ### 4. Universal Mac binary
 
-`lipo` is a macOS tool that glues two binaries into one file. A later job, on a Mac runner, downloads the Intel archive and the Apple silicon archive, unpacks `rmbin` from each, and runs:
+GitHub's Apple silicon runners are commented out for 0.0.1. They were cancelled with "not acquired by Runner" while that pool was full. Re-enable them for 0.1.1. Until then the Intel macOS runner cross-compiles `aarch64-apple-darwin` (minimum macOS 11.0) and runs `lipo` itself:
 
 ```bash
 lipo -create rmbin-x86_64 rmbin-aarch64 -output rmbin
 ```
+
+The Intel runner cannot execute the arm64 tests. The arm64 binary is still shipped. Apple silicon users can also build from source.
 
 The result is `rmbin-universal-apple-darwin.tar.gz`. The separate Intel and Apple silicon archives stay in the release too. The universal file is what the Homebrew formula installs once you fill in its checksum. It is a CLI binary, not an `.app`.
 

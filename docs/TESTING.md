@@ -8,8 +8,8 @@ Use made-up test data only, for example `EXAMPLE_TOKEN_123`. Do not start with a
 
 | Target | Runner | Filesystem the tests see |
 |---|---|---|
-| `x86_64-apple-darwin` | `macos-15-intel` | APFS |
-| `aarch64-apple-darwin` | `macos-15` | APFS |
+| `x86_64-apple-darwin` | `macos-15-intel` | APFS. This job also cross-compiles `aarch64-apple-darwin` and checks its 11.0 stamp. It does not run the arm64 tests. |
+| `aarch64-apple-darwin` on a Mac runner | disabled for 0.0.1 | GitHub's arm64 pool was not handing out runners. Re-enable for 0.1.1. |
 | `x86_64-unknown-linux-musl` | `ubuntu-24.04` | ext4 |
 | `aarch64-unknown-linux-musl` | `ubuntu-24.04-arm` | ext4 |
 | `armv7-unknown-linux-musleabihf` | `ubuntu-24.04` via `qemu-arm` | ext4 host, armhf binary |
