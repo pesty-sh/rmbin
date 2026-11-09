@@ -1,5 +1,21 @@
-# Builds release archives when a v* tag is pushed.
-# Pushing the tag creates the GitHub Release. Do not push a tag until you mean to publish.
+# Release pipeline.
+#
+# This file does not run on pull requests. It runs only when a tag matching
+# `v*` is pushed, for example `v0.0.1`. Pushing that tag creates the GitHub
+# Release if every job succeeds. Do not push a tag until you mean to publish.
+#
+# Order:
+#   1. matrix builds (one job per CPU/OS target)
+#   2. .deb packages on the four Linux jobs (cargo-deb, gzip)
+#   3. universal Mac binary (lipo of the Intel and Apple silicon builds)
+#   4. SHA256SUMS over every archive and every .deb
+#   5. GitHub Release
+#
+# Homebrew and apt are not updated here. Those repositories are separate.
+# docs/RELEASING.md explains each step in plain language.
+#
+# Public repositories are not billed for GitHub-hosted runner minutes.
+
 name: Release
 
 on:
@@ -15,9 +31,12 @@ jobs:
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
+      # Keep going so the log shows every broken target, not only the first.
+      # The GitHub Release still waits for all of them.
       fail-fast: false
       matrix:
         include:
+          # One macOS build per CPU family. Not one per macOS version.
           - os: macos-15-intel
             target: x86_64-apple-darwin
             archive: tar
@@ -25,7 +44,10 @@ jobs:
           - os: macos-15
             target: aarch64-apple-darwin
             archive: tar
+            # Apple silicon cannot load a binary stamped older than 11.0.
             minos: "11.0"
+
+          # Native static musl. Debian architecture names differ from Rust's.
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-musl
             archive: tar
@@ -34,14 +56,33 @@ jobs:
             target: aarch64-unknown-linux-musl
             archive: tar
             deb: arm64
+
+          # Cross-linked on the x86_64 runner. rust-lld does the link.
+          # See .cargo/config.toml and packaging/rust-lld.sh.
+          - os: ubuntu-24.04
+            target: armv7-unknown-linux-musleabihf
+            archive: tar
+            deb: armhf
+          - os: ubuntu-24.04
+            target: i686-unknown-linux-musl
+            archive: tar
+            deb: i386
+
+          # Windows 10 / Server 2016+, 64-bit x86. Zip, because that is what
+          # Windows users expect. aarch64-pc-windows-msvc is omitted: the
+          # hosted image does not reliably ship the ARM64 MSVC libraries.
           - os: windows-2025
             target: x86_64-pc-windows-msvc
             archive: zip
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@1.85.0
         with:
           targets: ${{ matrix.target }}
+
+      # The tag is `v0.0.1`. Cargo.toml says `0.0.1`. They must match.
       - name: Version matches the tag
         shell: bash
         run: |
@@ -50,27 +91,35 @@ jobs:
           cargo_version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
           test "$tag" = "$cargo_version"
           echo "tag=$tag" >> "$GITHUB_ENV"
+
       - name: Build
         shell: bash
         run: |
           set -eu
+          # Empty on Linux and Windows. Set on the two macOS jobs.
           if [ -n "${{ matrix.minos }}" ]; then
             export MACOSX_DEPLOYMENT_TARGET="${{ matrix.minos }}"
           fi
           cargo build --release --locked --target "${{ matrix.target }}"
+
       - name: macOS deployment target
         if: matrix.minos
         run: ./packaging/check-macos-minos.sh "target/${{ matrix.target }}/release/rmbin" "${{ matrix.minos }}"
+
       - name: Link check
         shell: bash
         run: |
           set -eu
           ext=""
-          if [ "${{ matrix.target }}" = "x86_64-pc-windows-msvc" ]; then
+          if [ "${{ matrix.archive }}" = "zip" ]; then
             ext=".exe"
           fi
           ./packaging/check-linked-libs.sh "target/${{ matrix.target }}/release/rmbin${ext}"
-      - name: Pack
+
+      # The archive name includes the version and the Rust target so a person
+      # can see which file they downloaded. The binary inside is just `rmbin`
+      # (or `rmbin.exe`).
+      - name: Pack archive
         shell: bash
         run: |
           set -eu
@@ -82,46 +131,110 @@ jobs:
             tar -czf "dist/${name}.tar.gz" -C "target/${{ matrix.target }}/release" rmbin
           fi
           rustc --version > "dist/${name}.buildinfo"
+
+      # cargo-deb reads [package.metadata.deb] in Cargo.toml.
+      # --no-build packs the binary this job already linked.
+      # --compress-type gzip writes data.tar.gz. xz is cargo-deb's default
+      # and is the reason this flag is explicit.
+      # --no-default-features on install avoids compiling liblzma into cargo-deb.
       - name: Debian package
         if: matrix.deb
         shell: bash
         run: |
           set -eu
-          python3 packaging/mkdeb.py \
-            "target/${{ matrix.target }}/release/rmbin" \
-            "$tag" \
-            "${{ matrix.deb }}" \
-            "dist/rmbin_${tag}-1_${{ matrix.deb }}.deb"
+          cargo install cargo-deb --version 3.8.0 --locked --no-default-features
+          cargo deb --no-build --compress-type gzip --target "${{ matrix.target }}"
+          mkdir -p dist
+          find target -name 'rmbin_*.deb' -exec cp {} dist/ \;
+          python3 - dist/rmbin_*.deb <<'PY'
+          import glob, sys
+          path = glob.glob("dist/rmbin_*.deb")[0]
+          data = open(path, "rb").read()
+          if b"data.tar.gz" not in data:
+              sys.exit("deb is not gzip-compressed: " + path)
+          print("gzip deb", path)
+          PY
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
           path: dist/*
           if-no-files-found: error
 
+  # lipo only exists on macOS. This job waits until both Mac builds have
+  # uploaded their tarballs, then glues the two binaries into one file.
+  # The separate Intel and Apple silicon archives are kept as well.
+  universal-macos:
+    name: macOS universal binary
+    needs: build
+    runs-on: macos-15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: x86_64-apple-darwin
+          path: intel
+      - uses: actions/download-artifact@v4
+        with:
+          name: aarch64-apple-darwin
+          path: silicon
+
+      - name: lipo -create
+        run: |
+          set -eu
+          mkdir -p intel/unpacked silicon/unpacked dist
+          tar -xzf intel/rmbin-v*-x86_64-apple-darwin.tar.gz -C intel/unpacked
+          tar -xzf silicon/rmbin-v*-aarch64-apple-darwin.tar.gz -C silicon/unpacked
+          # One file, two slices. Not an .app.
+          lipo -create intel/unpacked/rmbin silicon/unpacked/rmbin -output rmbin
+          lipo -info rmbin | tee lipo-info.txt
+          grep -q x86_64 lipo-info.txt
+          grep -q arm64 lipo-info.txt
+          # The asset name is fixed so the Homebrew formula can point at it.
+          tar -czf dist/rmbin-universal-apple-darwin.tar.gz rmbin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: universal-apple-darwin
+          path: dist/rmbin-universal-apple-darwin.tar.gz
+          if-no-files-found: error
+
+  # Downloads every artifact, hashes the files a user would download, and
+  # opens the GitHub Release. Homebrew and apt are not touched.
   publish:
     name: Checksums and GitHub Release
-    needs: build
+    needs: [build, universal-macos]
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-      - name: SHA256SUMS
+
+      - name: SHA256SUMS and release notes
         run: |
           set -eu
           cd dist
-          # Hash the archives and packages, not the buildinfo notes.
-          find . -maxdepth 1 -type f ! -name '*.buildinfo' -printf '%P\n' | sort | xargs sha256sum > SHA256SUMS
+          # Hash archives and .deb files. Skip build notes and this file.
+          find . -maxdepth 1 -type f ! -name '*.buildinfo' ! -name 'SHA256SUMS' -printf '%P\n' \
+            | sort \
+            | xargs sha256sum \
+            > SHA256SUMS
+          version="${GITHUB_REF_NAME#v}"
+          # The template uses the word VERSION as a placeholder.
+          sed "s/VERSION/${version}/g" "$GITHUB_WORKSPACE/docs/RELEASE_NOTES_TEMPLATE.md" > "$RUNNER_TEMP/NOTES.md"
           {
-            echo "rmbin ${GITHUB_REF_NAME}"
             echo
-            echo "Alpha. Overwrite is best effort on SSDs, APFS, snapshots, and backups."
-            echo "The binaries are not signed. Verify with: sha256sum -c SHA256SUMS"
+            echo "Built with:"
             echo
             cat ./*.buildinfo
-          } > "$RUNNER_TEMP/NOTES.md"
+          } >> "$RUNNER_TEMP/NOTES.md"
+          echo "---- SHA256SUMS ----"
           cat SHA256SUMS
+          # Do not attach the buildinfo files. They are notes, not downloads.
+          rm -f ./*.buildinfo
+
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*

@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Pack one static rmbin binary into a .deb. No maintainer scripts."""
+"""Pack one static rmbin binary into a .deb without cargo-deb.
+
+The release workflow does not call this script. It uses `cargo deb` so the
+package metadata lives in Cargo.toml. This file is a fallback for a machine
+that cannot install cargo-deb. It writes gzip members, same as `--compress-type gzip`.
+"""
 
 import hashlib
 import io

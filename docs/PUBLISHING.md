@@ -12,24 +12,9 @@ Nothing in this repository publishes a release on its own. The owner does these 
 
 ## GitHub Release
 
-The workflow [`.github/workflows/release.yml`](../.github/workflows/release.yml) starts when a tag matching `v*` is pushed. Pushing the tag **creates the GitHub Release**. Do not push it until you want that.
+How the workflow is wired, including the tag command, is [RELEASING.md](RELEASING.md). Pushing the tag **creates the GitHub Release**. Do not push it until you want that.
 
-```bash
-git checkout main
-git pull origin main
-git tag -a v0.0.1 -m "rmbin 0.0.1"
-git push origin v0.0.1
-```
-
-Wait until the Release workflow is green. The release should contain:
-
-- `rmbin-v0.0.1-x86_64-apple-darwin.tar.gz`
-- `rmbin-v0.0.1-aarch64-apple-darwin.tar.gz`
-- `rmbin-v0.0.1-x86_64-unknown-linux-musl.tar.gz`
-- `rmbin-v0.0.1-aarch64-unknown-linux-musl.tar.gz`
-- `rmbin-v0.0.1-x86_64-pc-windows-msvc.zip`
-- `rmbin_0.0.1-1_amd64.deb` and `rmbin_0.0.1-1_arm64.deb`
-- `SHA256SUMS`
+Wait until the Release workflow is green. `SHA256SUMS` lists every tarball, the Windows zip, the universal Mac archive, and every `.deb`.
 
 Verify on a second machine:
 
@@ -56,14 +41,7 @@ Copy [`packaging/homebrew/rmbin.rb`](../packaging/homebrew/rmbin.rb) to `Formula
 HOMEBREW_NO_AUTO_UPDATE=1 brew install --HEAD pesty-sh/tap/rmbin
 ```
 
-After `v0.0.1` is on GitHub, checksum **GitHub's** tarball, not a local `git archive`:
-
-```bash
-curl -fsSL -o /tmp/rmbin.tar.gz https://github.com/pesty-sh/rmbin/archive/refs/tags/v0.0.1.tar.gz
-shasum -a 256 /tmp/rmbin.tar.gz
-```
-
-Paste that hash into `sha256`, uncomment `url` and `sha256` in the tap's formula, commit, and push the tap. Then:
+After `v0.0.1` is on GitHub, the stable install is the **universal** Mac binary from the release, not a source tarball and not one archive per macOS version. Copy the hash from `SHA256SUMS` for `rmbin-universal-apple-darwin.tar.gz`. A local `shasum` of a file you built will not match. Uncomment `url` and `sha256` in the tap's formula, commit, and push the tap. Then:
 
 ```bash
 brew update
@@ -74,9 +52,9 @@ brew install pesty-sh/tap/rmbin
 
 ## apt
 
-The Linux archives are static musl binaries packed by [`packaging/mkdeb.py`](../packaging/mkdeb.py). They do not depend on a particular glibc. There are no maintainer scripts.
+The release builds four static musl `.deb` packages with `cargo deb --compress-type gzip`: `amd64`, `arm64`, `armhf`, and `i386`. They do not depend on glibc. There are no maintainer scripts. gzip is used so Ubuntu 14.04 and Debian 8 can unpack them.
 
-On the machine that holds the apt signing key for [pesty-sh/apt](https://github.com/pesty-sh/apt), pass the two `.deb` files from the GitHub Release to that repo's `publish.py`, then commit `pool/` and `dists/` the same way qrbin is published. The fingerprint and the `signed-by` line already used by that repo stay as they are.
+On the machine that holds the apt signing key for [pesty-sh/apt](https://github.com/pesty-sh/apt), pass those four `.deb` files from the GitHub Release to that repo's `publish.py`, then commit `pool/` and `dists/` the same way the other packages in that repo are published. The fingerprint and the `signed-by` line already used by that repo stay as they are.
 
 An optional pin file is [`packaging/apt/rmbin.pref`](../packaging/apt/rmbin.pref). It is not required when Debian and Ubuntu do not ship a package of the same name.
 

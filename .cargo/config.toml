@@ -1,0 +1,11 @@
+# Cross musl builds. x86_64 and aarch64 musl link on their own runners.
+# armv7 and i686 are built on an x86_64 Linux runner, whose `ld` cannot read
+# those objects. Use the lld that ships with rustc. See packaging/rust-lld.sh.
+
+[target.armv7-unknown-linux-musleabihf]
+linker = "packaging/rust-lld.sh"
+rustflags = ["-C", "linker-flavor=ld.lld"]
+
+[target.i686-unknown-linux-musl]
+linker = "packaging/rust-lld.sh"
+rustflags = ["-C", "linker-flavor=ld.lld"]

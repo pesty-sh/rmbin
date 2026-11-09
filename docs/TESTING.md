@@ -12,6 +12,8 @@ Use made-up test data only, for example `EXAMPLE_TOKEN_123`. Do not start with a
 | `aarch64-apple-darwin` | `macos-15` | APFS |
 | `x86_64-unknown-linux-musl` | `ubuntu-24.04` | ext4 |
 | `aarch64-unknown-linux-musl` | `ubuntu-24.04-arm` | ext4 |
+| `armv7-unknown-linux-musleabihf` | `ubuntu-24.04` via `qemu-arm` | ext4 host, armhf binary |
+| `i686-unknown-linux-musl` | `ubuntu-24.04` via `qemu-i386` | ext4 host, i386 binary |
 | `x86_64-pc-windows-msvc` | `windows-2025` | NTFS |
 
 There is no macOS 13 runner. macOS 13 is manual.

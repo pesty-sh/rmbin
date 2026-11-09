@@ -31,6 +31,36 @@ codegen-units = 1
 strip = true
 panic = "abort"
 
+# Metadata for the `cargo deb` packaging tool. cargo-deb is not a dependency
+# of the rmbin binary. CI installs it only when it builds a .deb.
+# Compression is NOT a field here. The release workflow passes
+# `--compress-type gzip` so Ubuntu 14.04 and Debian 8 dpkg can unpack the
+# archive. The default in current cargo-deb is xz, which some of those
+# old dpkg builds reject.
+[package.metadata.deb]
+maintainer = "pesty-sh <pesty@pesty.sh>"
+copyright = "2026 pesty-sh"
+section = "utils"
+priority = "optional"
+# Static musl binaries do not link glibc. An empty depends list stops
+# cargo-deb from adding libc6 via `$auto`.
+depends = ""
+extended-description = """
+Overwrites file contents with a repeating text pattern, syncs to disk, then
+deletes the name. No network access and no telemetry. Overwriting is best
+effort on SSDs, copy-on-write filesystems, snapshots, and backups.
+Installing or removing this package only adds or removes /usr/bin/rmbin.
+It does not delete your files. There is no warranty. See DISCLAIMER.md.
+"""
+assets = [
+    # `target/release/` is a token cargo-deb rewrites for the real target dir.
+    ["target/release/rmbin", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/rmbin/README.md", "644"],
+    ["DISCLAIMER.md", "usr/share/doc/rmbin/DISCLAIMER.md", "644"],
+    ["LICENSE-MIT", "usr/share/doc/rmbin/LICENSE-MIT", "644"],
+    ["LICENSE-APACHE", "usr/share/doc/rmbin/LICENSE-APACHE", "644"],
+]
+
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
