@@ -41,7 +41,9 @@ jobs:
             target: x86_64-apple-darwin
             archive: tar
             minos: "10.12"
-          - os: macos-15
+          # macos-latest is the current Apple silicon pool. macos-15 was
+          # refusing jobs when that exact image had no free runners.
+          - os: macos-latest
             target: aarch64-apple-darwin
             archive: tar
             # Apple silicon cannot load a binary stamped older than 11.0.

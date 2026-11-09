@@ -37,11 +37,11 @@ jobs:
             os: macos-15-intel
             target: x86_64-apple-darwin
             minos: "10.12"
-          # macos-15 is the Apple silicon image. GitHub sometimes cannot
-          # hand out that runner ("not acquired after multiple attempts").
-          # Re-run the job when that happens. It is not a compile failure.
+          # macos-latest is the current Apple silicon image. Pinning macos-15
+          # was cancelled with "not acquired by Runner" while that pool was full.
+          # The target is still aarch64-apple-darwin. Minimum OS stays 11.0.
           - name: macOS Apple Silicon
-            os: macos-15
+            os: macos-latest
             target: aarch64-apple-darwin
             minos: "11.0"
 
