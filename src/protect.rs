@@ -14,6 +14,8 @@
 //! mount points and volume roots reported by the operating system, and the
 //! current home directory.
 
+// Only the Unix checks call into `std::fs`. Windows uses the path lists alone.
+#[cfg(unix)]
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 

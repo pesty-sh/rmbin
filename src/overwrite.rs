@@ -15,8 +15,10 @@
 //! delete. Deleting is Section 10.
 //!
 //! The final symlink is not followed. On Linux and macOS the open uses
-//! `O_NOFOLLOW`. On Windows the open uses `FILE_FLAG_OPEN_REPARSE_POINT` and
-//! then refuses the handle if it is still a link.
+//! `O_NOFOLLOW`. That number is not the same on every CPU: 32-bit ARM and
+//! aarch64 use `0x8000`, and x86 uses `0x20000`. On Windows the open uses
+//! `FILE_FLAG_OPEN_REPARSE_POINT`. Before any write, the open file is compared
+//! with a `symlink_metadata` check so a followed link is refused.
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, Seek, SeekFrom, Write};
@@ -38,6 +40,22 @@ pub fn open_no_follow(path: &Path) -> Result<File> {
     let mut options = OpenOptions::new();
     // `read` is on so the length can be read back from this same handle.
     // We do not read the old contents into a buffer, and we never print them.
+    // Look at the name before opening it. `symlink_metadata` does not follow
+    // a final symlink, so this refuses the link even if the open flag is wrong.
+    let named = std::fs::symlink_metadata(path).map_err(|source| {
+        Error::NotSecurelyDeleted {
+            path: path.to_path_buf(),
+            reason: format!(
+                "could not read the path before writing: {source}. The file was kept and was not changed by this step."
+            ),
+        }
+    })?;
+    if named.file_type().is_symlink() || crate::classify::is_reparse(&named) {
+        return Err(Error::NotSecurelyDeleted {
+            path: path.to_path_buf(),
+            reason: "the path is a symlink. It was not overwritten.".to_owned(),
+        });
+    }
     options.read(true).write(true).create(false).truncate(false);
     apply_no_follow(&mut options);
     let file = options.open(path).map_err(|source| Error::NotSecurelyDeleted {
@@ -53,9 +71,17 @@ pub fn open_no_follow(path: &Path) -> Result<File> {
             reason: "the path is a symlink. It was not overwritten.".to_owned(),
         });
     }
+    // The open handle must be the same file the name pointed at. If they
+    // differ, the open followed a link and nothing has been written yet.
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
+        if meta.dev() != named.dev() || meta.ino() != named.ino() {
+            return Err(Error::NotSecurelyDeleted {
+                path: path.to_path_buf(),
+                reason: "the open file is not the named file. It was not overwritten.".to_owned(),
+            });
+        }
         if meta.nlink() > 1 {
             return Err(Error::NotSecurelyDeleted {
                 path: path.to_path_buf(),
@@ -69,12 +95,19 @@ pub fn open_no_follow(path: &Path) -> Result<File> {
 }
 
 fn apply_no_follow(options: &mut OpenOptions) {
-    // Linux: O_NOFOLLOW is 0x20000. macOS: O_NOFOLLOW is 0x0100.
     // Windows: FILE_FLAG_OPEN_REPARSE_POINT is 0x00200000.
+    // macOS: O_NOFOLLOW is 0x0100.
+    // Linux x86: O_NOFOLLOW is 0400000 octal (0x20000), from asm-generic.
+    // Linux ARM and aarch64: O_NOFOLLOW is 0100000 octal (0x8000).
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(0x0002_0000);
+        let flag = if cfg!(any(target_arch = "aarch64", target_arch = "arm")) {
+            0x0000_8000
+        } else {
+            0x0002_0000
+        };
+        options.custom_flags(flag);
     }
     #[cfg(target_os = "macos")]
     {

@@ -16,7 +16,9 @@
 //! parent folder. The limits banner is the place that difference is stated
 //! for hard links and other volumes; parent-folder sync is noted in SECURITY.md.
 
-use std::fs::{self, File};
+use std::fs;
+#[cfg(unix)]
+use std::fs::File;
 use std::path::Path;
 
 use crate::error::{Error, Result};
