@@ -6,6 +6,12 @@ rmbin never connects to the internet. It has no updates, telemetry or tracking. 
 
 On SSDs, APFS, snapshots and backups, overwriting can't guarantee that old data is gone. rmbin tells you when that applies.
 
+## Disclaimer / No warranty
+
+rmbin permanently destroys data by design, and deleted files cannot be recovered. It is provided "AS IS", without warranty of any kind. To the maximum extent permitted by law, the authors and contributors accept no liability for any loss or damage, including lost or damaged data, files, software, hardware or storage devices, arising from use or misuse. Users are solely responsible for choosing targets, keeping backups, and testing with `--dry-run` first. Use at your own risk.
+
+The MIT and Apache-2.0 licence texts already say there is no warranty. [DISCLAIMER.md](DISCLAIMER.md) is the same limit, written for this program. The authors and contributors take no responsibility for damaged files or hardware.
+
 ## Principles
 
 1. **No network.** The program never opens a socket. There is no update check, telemetry, crash report, analytics, or phone-home. CI fails if a networking crate appears in the tree, or if the source names the standard networking API.
@@ -103,17 +109,20 @@ cargo test --locked
 
 `make` builds the release binary and leaves it at `target/release/rmbin`. It does not copy it onto `PATH`. The program does not install or uninstall itself, and install docs do not delete your files.
 
-Targets the release workflow builds:
+Targets the release workflow builds. One macOS build is not made per macOS version. The Intel binary is stamped 10.12 and the Apple silicon binary is stamped 11.0. `lipo` joins those two into one universal binary. There is no `.app`.
 
-| Target | System |
+| Archive | Minimum system |
 |---|---|
-| `x86_64-apple-darwin` | macOS, Intel |
-| `aarch64-apple-darwin` | macOS, Apple silicon |
-| `x86_64-unknown-linux-musl` | Linux, static |
-| `aarch64-unknown-linux-musl` | Linux, static |
-| `x86_64-pc-windows-msvc` | Windows |
+| `x86_64-apple-darwin` | macOS 10.12 on Intel. The owner's first machine is macOS 13. |
+| `aarch64-apple-darwin` | macOS 11.0 on Apple silicon |
+| `rmbin-universal-apple-darwin.tar.gz` | The two slices above, in one file |
+| `x86_64-unknown-linux-musl` | Static. `.deb` arch `amd64`. Ubuntu 14.04 / Debian 8 or newer |
+| `aarch64-unknown-linux-musl` | Static. `.deb` arch `arm64`. Same floor |
+| `armv7-unknown-linux-musleabihf` | Static. `.deb` arch `armhf`. Same floor |
+| `i686-unknown-linux-musl` | Static. `.deb` arch `i386`. Same floor |
+| `x86_64-pc-windows-msvc` | Windows 10 or Windows Server 2016, 64-bit |
 
-macOS 13 on a 2014 Intel Mac is the machine the project is aimed at first. A binary stamped for an older macOS is not a promise until that machine has run it. See [docs/TESTING.md](docs/TESTING.md).
+CI runs on current GitHub images, not on Ubuntu 14.04 or macOS 10.12. A static binary does not need those systems' C libraries. That is not the same as having booted them. See [docs/TESTING.md](docs/TESTING.md) and [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Checksums and releases
 

@@ -110,6 +110,8 @@ fn help_and_version() {
     assert!(help_text.contains("--list"));
     assert!(help_text.contains("--yes"));
     assert!(help_text.contains("best-effort"));
+    assert!(help_text.contains("DISCLAIMER.md"));
+    assert!(help_text.contains("No warranty"));
     assert!(help_text.contains("Not in 0.0.1"));
     assert!(help_text.contains("0.0.1"));
 

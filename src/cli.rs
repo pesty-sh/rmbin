@@ -53,6 +53,8 @@ pub struct Cli {
 }
 
 const AFTER_HELP: &str = "\
+No warranty. Deletion is permanent. Read DISCLAIMER.md before use.
+
 Overwrite is best-effort. SSDs, APFS, snapshots and backups can keep old bytes.
 
 Examples:

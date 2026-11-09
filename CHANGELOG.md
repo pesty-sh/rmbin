@@ -11,5 +11,6 @@ Not released. The owner publishes the tag `v0.0.1` after review. See [docs/PUBLI
 - The limits banner is printed on every run.
 - No network access, no telemetry, and no extra crates beyond `clap`.
 - Not in this version: `--recycle`, `--verify`, `--wipe-free-space`, JSON plans, rename-before-delete, and server cleanup.
+- Disclaimer: deletion is permanent, the program is "AS IS", and the authors accept no liability for lost data or damaged hardware. See DISCLAIMER.md. `--help` points at it. The confirmation prompt says the deletion is permanent and that typing `yes` accepts the risk.
 
 The licence is provisionally MIT OR Apache-2.0 until the owner confirms it.

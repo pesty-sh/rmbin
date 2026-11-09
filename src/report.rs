@@ -29,6 +29,11 @@ pub fn write_banner(out: &mut impl Write) -> Result<()> {
     let version = env!("CARGO_PKG_VERSION");
     writeln!(
         out,
+        "No warranty. Deletion is permanent and cannot be undone. See DISCLAIMER.md."
+    )
+    .map_err(Error::report)?;
+    writeln!(
+        out,
         "rmbin {version} alpha. Assurance level B: best-effort overwrite. This is not a certified wipe."
     )
     .map_err(Error::report)?;

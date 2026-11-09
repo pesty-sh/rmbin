@@ -20,6 +20,16 @@ use crate::error::{Error, Result};
 /// Returns [`Error::Cancelled`] when the line is not `yes`, or an IO error
 /// when the reply cannot be read.
 pub fn ask(input: &mut impl BufRead, out: &mut impl Write) -> Result<()> {
+    writeln!(
+        out,
+        "This permanently destroys the paths above. Deleted files cannot be recovered."
+    )
+    .map_err(Error::report)?;
+    writeln!(
+        out,
+        "There is no warranty. By typing yes you accept that risk. See DISCLAIMER.md."
+    )
+    .map_err(Error::report)?;
     writeln!(out, "Type yes to continue:").map_err(Error::report)?;
     out.flush().map_err(Error::report)?;
     let mut line = String::new();
@@ -48,6 +58,8 @@ mod tests {
         assert!(ask(&mut Cursor::new(b"YES\n"), &mut Vec::new()).is_err());
         assert!(ask(&mut Cursor::new(b""), &mut Vec::new()).is_err());
         let text = String::from_utf8(output).expect("utf8");
+        assert!(text.contains("permanently destroys"));
+        assert!(text.contains("accept that risk"));
         assert!(text.contains("Type yes to continue:"));
     }
 }

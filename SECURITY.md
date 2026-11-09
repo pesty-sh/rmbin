@@ -1,5 +1,7 @@
 # Security
 
+The authors and contributors accept no liability for lost data or damaged hardware. Read [DISCLAIMER.md](DISCLAIMER.md) before you run rmbin.
+
 `rmbin` overwrites a file with a repeating text pattern, asks the operating system to flush that write, and then deletes the name. Assurance level B means best-effort overwrite. It is not a certified wipe.
 
 ## What a failure looks like
