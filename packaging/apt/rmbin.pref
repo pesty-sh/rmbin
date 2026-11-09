@@ -1,0 +1,4 @@
+Explanation: Prefer rmbin from the pesty-sh apt repository when that repository is configured.
+Package: rmbin
+Pin: origin pesty-sh.github.io
+Pin-Priority: 1001

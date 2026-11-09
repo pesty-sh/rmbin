@@ -1,0 +1,39 @@
+[package]
+name = "rmbin"
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.85"
+description = "Offline file and folder remover. Overwrites with a plain text pattern, syncs to disk, then deletes. No network access, no telemetry. States its limits."
+authors = ["pesty-sh <pesty@pesty.sh>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/pesty-sh/rmbin"
+homepage = "https://pesty.sh"
+readme = "README.md"
+keywords = ["cli", "overwrite", "delete", "offline", "privacy"]
+categories = ["command-line-utilities"]
+
+# Runtime dependencies stay tiny on purpose. clap only parses arguments.
+# Do not add a crate that opens sockets. CI rejects those names.
+[dependencies]
+# Exact pin. `wrap_help` is off: it pulls terminal_size, which pulls rustix.
+clap = { version = "=4.5.53", default-features = false, features = [
+    "std",
+    "help",
+    "usage",
+    "error-context",
+    "derive",
+] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
