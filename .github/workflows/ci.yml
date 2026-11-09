@@ -37,6 +37,9 @@ jobs:
             os: macos-15-intel
             target: x86_64-apple-darwin
             minos: "10.12"
+          # macos-15 is the Apple silicon image. GitHub sometimes cannot
+          # hand out that runner ("not acquired after multiple attempts").
+          # Re-run the job when that happens. It is not a compile failure.
           - name: macOS Apple Silicon
             os: macos-15
             target: aarch64-apple-darwin
