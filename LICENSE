@@ -1,0 +1,8 @@
+rmbin is provisionally dual-licensed under either of:
+
+- the MIT license, reproduced in LICENSE-MIT
+- the Apache License, Version 2.0, reproduced in LICENSE-APACHE
+
+The owner has not confirmed this choice yet. It is the usual dual licence for Rust crates, used here so the tree has a clear placeholder. Do not treat it as a final decision.
+
+You may use this software under the terms of either licence.
