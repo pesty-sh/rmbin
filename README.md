@@ -113,9 +113,9 @@ Targets the release workflow builds. One macOS build is not made per macOS versi
 
 | Archive | Minimum system |
 |---|---|
-| `x86_64-apple-darwin` | macOS 10.12 on Intel. The owner's first machine is macOS 13. |
-| `aarch64-apple-darwin` | macOS 11.0 on Apple silicon. Cross-compiled on the Intel release job. GitHub's arm64 Mac runners are off for 0.0.1, so those tests are not run here. |
-| `rmbin-universal-apple-darwin.tar.gz` | Both slices, made with `lipo` on the Intel runner. Not an `.app` |
+| `x86_64-apple-darwin` | macOS 10.12 on Intel. The owner's first machine is macOS 13. Built by the optional Intel workflow, not by pull-request CI. |
+| `aarch64-apple-darwin` | macOS 11.0 on Apple silicon. Built by the optional Apple silicon workflow. |
+| `rmbin-universal-apple-darwin.tar.gz` | Optional third step: `lipo` after both Mac tarballs are on the release. Not an `.app`. |
 | `x86_64-unknown-linux-musl` | Static. `.deb` arch `amd64`. Ubuntu 14.04 / Debian 8 or newer |
 | `aarch64-unknown-linux-musl` | Static. `.deb` arch `arm64`. Same floor |
 | `armv7-unknown-linux-musleabihf` | Static. `.deb` arch `armhf`. Same floor |

@@ -1,0 +1,73 @@
+# Optional universal Mac binary.
+#
+# Run this by hand AFTER both of these files are already on the same
+# GitHub Release:
+#   rmbin-vX.Y.Z-x86_64-apple-darwin.tar.gz
+#   rmbin-vX.Y.Z-aarch64-apple-darwin.tar.gz
+#
+# Those come from Release macOS Intel and Release Apple Silicon.
+# This file does not run on pull_request, so it is not a required check.
+# It does not run on a tag by itself: the two Mac builds may still be
+# queued when the tag's main release is created.
+#
+# lipo is a macOS tool. This job uses the Intel image so it does not
+# wait on the arm64 runner pool. An Intel Mac can still glue an arm64
+# slice into a universal file.
+
+name: Release macOS universal
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag that already has both Mac tarballs, for example v0.0.1"
+        required: true
+        type: string
+        # CHANGE ME: the example tag. You type the real tag when you click Run.
+        default: "v0.0.1"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos-universal-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  universal:
+    name: macOS universal optional
+    # CHANGE ME: Intel image. lipo does not need an Apple silicon runner.
+    runs-on: macos-15-intel
+    timeout-minutes: 360
+
+    steps:
+      - name: Download both Mac builds and lipo
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -eu
+          version="${TAG#v}"
+          intel="rmbin-v${version}-x86_64-apple-darwin.tar.gz"
+          silicon="rmbin-v${version}-aarch64-apple-darwin.tar.gz"
+          mkdir -p intel silicon dist/root
+          gh release download "$TAG" --pattern "$intel" --dir intel
+          gh release download "$TAG" --pattern "$silicon" --dir silicon
+          tar -xzf "intel/${intel}" -C intel
+          tar -xzf "silicon/${silicon}" -C silicon
+          # Two slices, one CLI binary. Not an .app.
+          lipo -create intel/rmbin silicon/rmbin -output dist/root/rmbin
+          lipo -info dist/root/rmbin | tee lipo-info.txt
+          grep -q x86_64 lipo-info.txt
+          grep -q arm64 lipo-info.txt
+          tar -czf dist/rmbin-universal-apple-darwin.tar.gz -C dist/root rmbin
+          (cd dist && shasum -a 256 rmbin-universal-apple-darwin.tar.gz > rmbin-universal-apple-darwin.tar.gz.sha256)
+          cat dist/rmbin-universal-apple-darwin.tar.gz.sha256
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "No GitHub Release named ${TAG}. Run the other release workflows first." >&2
+            exit 1
+          fi
+          gh release upload "$TAG" \
+            dist/rmbin-universal-apple-darwin.tar.gz \
+            dist/rmbin-universal-apple-darwin.tar.gz.sha256 \
+            --clobber

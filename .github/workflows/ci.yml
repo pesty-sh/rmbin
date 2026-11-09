@@ -31,12 +31,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macOS: one build per CPU, not per OS version.
-          # 10.12 is the Intel floor. Apple silicon cannot load a binary older than 11.0.
-          - name: macOS Intel
-            os: macos-15-intel
-            target: x86_64-apple-darwin
-            minos: "10.12"
+          # DISABLED for 0.0.1 alpha: GitHub macOS Intel runner was cancelled
+          # by a newer CI run ("higher priority waiting request") while it was
+          # still queued. Build it from release-macos-intel.yml instead.
+          # Re-enable for 0.1.1.
+          # - name: macOS Intel
+          #   os: macos-15-intel
+          #   target: x86_64-apple-darwin
+          #   minos: "10.12"
           # DISABLED for 0.0.1 alpha: GitHub macOS arm64 runner capacity. Re-enable for 0.1.1.
           # - name: macOS Apple Silicon
           #   os: macos-latest
@@ -140,21 +142,18 @@ jobs:
           ./packaging/check-linked-libs.sh "target/${{ matrix.target }}/release/rmbin${ext}"
 
       # vtool can show the minimum macOS the binary will load on.
+      # No macOS row is active in this matrix for 0.0.1, so this step is skipped.
       - name: macOS deployment target
         if: matrix.minos
         run: ./packaging/check-macos-minos.sh "target/${{ matrix.target }}/release/rmbin" "${{ matrix.minos }}"
 
-      # The Apple silicon GitHub runner is disabled above. The Intel image
-      # can still cross-compile aarch64-apple-darwin. It cannot run those
-      # tests, so this step only checks that the binary links and is stamped 11.0.
-      - name: Cross-compile Apple silicon on Intel
-        if: matrix.target == 'x86_64-apple-darwin'
-        run: |
-          set -eu
-          rustup target add aarch64-apple-darwin
-          MACOSX_DEPLOYMENT_TARGET=11.0 cargo build --release --locked --target aarch64-apple-darwin
-          ./packaging/check-macos-minos.sh target/aarch64-apple-darwin/release/rmbin 11.0
-          file target/aarch64-apple-darwin/release/rmbin
+      # DISABLED for 0.0.1 alpha: this cross-compile ran only on the Intel
+      # macOS job, which is commented out above. Re-enable for 0.1.1.
+      # - name: Cross-compile Apple silicon on Intel
+      #   if: matrix.target == 'x86_64-apple-darwin'
+      #   run: |
+      #     rustup target add aarch64-apple-darwin
+      #     MACOSX_DEPLOYMENT_TARGET=11.0 cargo build --release --locked --target aarch64-apple-darwin
 
       # One .deb, on the native amd64 leg, so a bad cargo-deb flag fails in CI
       # instead of on the day somebody pushes a tag. The other three architectures

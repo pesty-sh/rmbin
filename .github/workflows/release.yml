@@ -7,9 +7,10 @@
 # Order:
 #   1. matrix builds (one job per CPU/OS target)
 #   2. .deb packages on the four Linux jobs (cargo-deb, gzip)
-#   3. universal Mac binary (lipo of the Intel and Apple silicon builds)
-#   4. SHA256SUMS over every archive and every .deb
-#   5. GitHub Release
+#   3. SHA256SUMS over the Linux and Windows archives
+#   4. GitHub Release
+# Mac builds are release-macos-intel.yml and release-apple-silicon.yml.
+# The universal binary is release-macos-universal.yml, run by hand.
 #
 # Homebrew and apt are not updated here. Those repositories are separate.
 # docs/RELEASING.md explains each step in plain language.
@@ -36,13 +37,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # One macOS build per CPU family. Not one per macOS version.
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            archive: tar
-            minos: "10.12"
+          # DISABLED for 0.0.1 alpha: GitHub macOS Intel jobs were cancelled
+          # while queued. Use release-macos-intel.yml. Re-enable for 0.1.1.
+          # - os: macos-15-intel
+          #   target: x86_64-apple-darwin
+          #   archive: tar
+          #   minos: "10.12"
           # DISABLED for 0.0.1 alpha: GitHub macOS arm64 runner capacity. Re-enable for 0.1.1.
-          # The arm64 binary is cross-compiled on the Intel job below, then lipo'd.
           # - os: macos-latest
           #   target: aarch64-apple-darwin
           #   archive: tar
@@ -157,30 +158,11 @@ jobs:
           print("gzip deb", path)
           PY
 
-      # Apple silicon GitHub runners are disabled for 0.0.1. This Intel
-      # Mac can cross-compile aarch64-apple-darwin with the Xcode linker.
-      # lipo then glues that binary to the Intel one. Tests of the arm64
-      # slice are not run here: this CPU cannot execute them.
-      - name: Cross-compile Apple silicon and lipo
-        if: matrix.target == 'x86_64-apple-darwin'
-        run: |
-          set -eu
-          rustup target add aarch64-apple-darwin
-          MACOSX_DEPLOYMENT_TARGET=11.0 cargo build --release --locked --target aarch64-apple-darwin
-          ./packaging/check-macos-minos.sh target/aarch64-apple-darwin/release/rmbin 11.0
-          tar -czf "dist/rmbin-v${tag}-aarch64-apple-darwin.tar.gz" \
-            -C target/aarch64-apple-darwin/release rmbin
-          # Two slices, one file. Not an .app. The separate archives stay too.
-          mkdir -p dist/universal-root
-          lipo -create \
-            target/x86_64-apple-darwin/release/rmbin \
-            target/aarch64-apple-darwin/release/rmbin \
-            -output dist/universal-root/rmbin
-          lipo -info dist/universal-root/rmbin | tee lipo-info.txt
-          grep -q x86_64 lipo-info.txt
-          grep -q arm64 lipo-info.txt
-          # Homebrew installs the file named rmbin from the archive root.
-          tar -czf dist/rmbin-universal-apple-darwin.tar.gz -C dist/universal-root rmbin
+      # DISABLED for 0.0.1 alpha: lipo moved to release-macos-universal.yml,
+      # which you run by hand after both Mac tarballs are on the release.
+      # - name: Cross-compile Apple silicon and lipo
+      #   if: matrix.target == 'x86_64-apple-darwin'
+      #   run: lipo -create ... 
 
       - uses: actions/upload-artifact@v4
         with:

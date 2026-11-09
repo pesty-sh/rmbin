@@ -34,8 +34,8 @@ A matrix is one job description repeated with different settings. Each setting i
 
 | Rust target | Runner | Archive |
 |---|---|---|
-| `x86_64-apple-darwin` | macOS Intel | `.tar.gz`, deployment target 10.12. This same job cross-compiles the Apple silicon binary and runs `lipo` |
-| `aarch64-apple-darwin` | not a separate runner in 0.0.1 | Cross-compiled on the Intel job. Deployment target 11.0. Tests of this slice are not run on GitHub |
+| `x86_64-apple-darwin` | optional Intel workflow, not this matrix | See section 4 |
+| `aarch64-apple-darwin` | optional Apple silicon workflow, not this matrix | See section 4 |
 | `x86_64-unknown-linux-musl` | Ubuntu x86_64 | `.tar.gz` plus `amd64` `.deb` |
 | `aarch64-unknown-linux-musl` | Ubuntu arm64 | `.tar.gz` plus `arm64` `.deb` |
 | `armv7-unknown-linux-musleabihf` | Ubuntu x86_64, cross-linked | `.tar.gz` plus `armhf` `.deb` |
@@ -69,21 +69,24 @@ Debian names:
 
 There are no maintainer scripts. Installing the package copies `/usr/bin/rmbin`. Removing it deletes that file only.
 
-### 4. Universal Mac binary
+### 4. Mac builds, optional
 
-GitHub's Apple silicon runners are commented out for 0.0.1. They were cancelled with "not acquired by Runner" while that pool was full. Re-enable them for 0.1.1. Until then the Intel macOS runner cross-compiles `aarch64-apple-darwin` (minimum macOS 11.0) and runs `lipo` itself:
+The main Release workflow does not build macOS. Both Mac runner pools were blocking pull requests: the arm64 pool never handed out a machine, and the Intel job was cancelled while queued because a newer CI run was waiting on the same concurrency group. That cancellation is not a code failure.
 
-```bash
-lipo -create rmbin-x86_64 rmbin-aarch64 -output rmbin
-```
+Two optional workflows build the Mac binaries. Neither runs on a pull request, so neither is a required check.
 
-The Intel runner cannot execute the arm64 tests. The arm64 binary is still shipped. Apple silicon users can also build from source.
+| Workflow | When it runs | What it uploads on a tag |
+|---|---|---|
+| [release-apple-silicon.yml](../.github/workflows/release-apple-silicon.yml) | Actions → Run workflow, or a `v*` tag | `rmbin-vX.Y.Z-aarch64-apple-darwin.tar.gz` and a `.sha256` file |
+| [release-macos-intel.yml](../.github/workflows/release-macos-intel.yml) | Actions → Run workflow, or a `v*` tag | `rmbin-vX.Y.Z-x86_64-apple-darwin.tar.gz` and a `.sha256` file |
 
-The result is `rmbin-universal-apple-darwin.tar.gz`. The separate Intel and Apple silicon archives stay in the release too. The universal file is what the Homebrew formula installs once you fill in its checksum. It is a CLI binary, not an `.app`.
+Each has its own concurrency group and `cancel-in-progress: false`. The main CI cannot cancel them. `gh release upload --clobber` adds the files to the release the main workflow created, or creates that release if it is not there yet.
 
-`lipo -info` must report both `x86_64` and `arm64`. Each slice keeps its own minimum macOS version.
+### 5. Universal Mac binary, also optional
 
-### 5. Checksums
+After both tarballs above are on the release, run [release-macos-universal.yml](../.github/workflows/release-macos-universal.yml) by hand. Type the tag, for example `v0.0.1`. It downloads the two archives onto an Intel Mac runner, runs `lipo -create`, and uploads `rmbin-universal-apple-darwin.tar.gz` plus its `.sha256`. It does not run on a tag by itself, because the two Mac jobs may still be queued. It is a CLI binary, not an `.app`. Homebrew uses that file once you paste the checksum.
+
+### 6. Checksums
 
 One Ubuntu job downloads every archive and every `.deb`. It writes `SHA256SUMS` with `sha256sum`. That file lists the tarballs, the zip, the universal archive, and the four `.deb` files. It does not list itself.
 
@@ -93,13 +96,13 @@ Check a download with:
 sha256sum -c SHA256SUMS
 ```
 
-### 6. GitHub Release
+### 7. GitHub Release
 
 The same job creates the GitHub Release for the tag and attaches those files plus `SHA256SUMS`. The release text starts from [RELEASE_NOTES_TEMPLATE.md](RELEASE_NOTES_TEMPLATE.md), with `VERSION` replaced by the Cargo version. The notes state the minimum systems.
 
 If any matrix leg fails, the release is not created. A partial set of binaries is not published.
 
-### 7. Homebrew and apt, by hand
+### 8. Homebrew and apt, by hand
 
 The workflow stops at the GitHub Release. It cannot push to `pesty-sh/homebrew-tap` or `pesty-sh/apt`.
 
