@@ -19,17 +19,34 @@
 
 name: Release
 
+# Trigger. A tag is a name stuck to one commit, like a bookmark.
+# `v*` means "only tags that start with v". `git tag v0.0.1` starts this
+# file. `git tag 0.0.1` does not, because the v is missing.
+# Pull requests do not start this file. That is why opening a PR never
+# publishes a release.
+# CHANGE ME: the tag pattern, if your project uses a different prefix.
 on:
   push:
     tags:
       - "v*"
 
+# Permissions are what the robot is allowed to do on GitHub.
+# `contents: write` is the permission that creates a Release and uploads
+# files to it. `contents: read` would let the build run but the upload
+# would be rejected.
+# CHANGE ME: this file does not use a secret. The token is the automatic
+# GITHUB_TOKEN. If you add signing later, store the key as a repository
+# secret and read it with ${{ secrets.YOUR_KEY_NAME }}. Never paste a key here.
 permissions:
   contents: write
 
 jobs:
+  # One job description, repeated. `matrix` is the list of repetitions.
+  # Each list item is one computer and one Rust target. They run at the
+  # same time. `name` is what you see in the GitHub checks list.
   build:
     name: ${{ matrix.target }}
+    # CHANGE ME: `os` in each row below is the GitHub computer image.
     runs-on: ${{ matrix.os }}
     strategy:
       # Keep going so the log shows every broken target, not only the first.
@@ -49,7 +66,13 @@ jobs:
           #   archive: tar
           #   minos: "11.0"
 
-          # Native static musl. Debian architecture names differ from Rust's.
+          # Linux musl. "Static" means the binary carries its own C library
+          # (musl) instead of borrowing the one on the server. That is why
+          # the same file can run on Ubuntu 14.04 and on Debian 8: it does
+          # not need their glibc. The Rust target name and the Debian
+          # package architecture are different words for the same machine.
+          # CHANGE ME: `target` is the Rust triple. `deb` is the Debian arch
+          # name (amd64, arm64, armhf, i386). Drop a row you do not ship.
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-musl
             archive: tar
@@ -78,8 +101,12 @@ jobs:
             archive: zip
 
     steps:
+      # Download this git commit onto the runner.
       - uses: actions/checkout@v4
 
+      # Install Rust 1.85, the same version as rust-toolchain.toml.
+      # `targets:` installs the standard library for that one triple only.
+      # CHANGE ME: the toolchain pin, if you raise the MSRV in Cargo.toml.
       - uses: dtolnay/rust-toolchain@1.85.0
         with:
           targets: ${{ matrix.target }}
@@ -94,6 +121,10 @@ jobs:
           test "$tag" = "$cargo_version"
           echo "tag=$tag" >> "$GITHUB_ENV"
 
+      # `--locked` refuses to build if Cargo.lock does not match Cargo.toml.
+      # `--release` is the optimised profile from Cargo.toml (lto, strip).
+      # The output path is target/<triple>/release/rmbin.
+      # CHANGE ME: the binary name is the Cargo package name, `rmbin`.
       - name: Build
         shell: bash
         run: |
@@ -108,6 +139,9 @@ jobs:
         if: matrix.minos
         run: ./packaging/check-macos-minos.sh "target/${{ matrix.target }}/release/rmbin" "${{ matrix.minos }}"
 
+      # Fail the release if the binary links a TLS or HTTP library.
+      # A musl binary is fully static, so this check passes immediately.
+      # CHANGE ME: the script looks for `rmbin` or `rmbin.exe`.
       - name: Link check
         shell: bash
         run: |
@@ -121,6 +155,9 @@ jobs:
       # The archive name includes the version and the Rust target so a person
       # can see which file they downloaded. The binary inside is just `rmbin`
       # (or `rmbin.exe`).
+      # A .tar.gz is a compressed folder, used on macOS and Linux.
+      # A .zip is the same idea, used on Windows (`tar -a` writes a zip).
+      # CHANGE ME: the `rmbin-v` prefix in the archive name, and `rmbin.exe`.
       - name: Pack archive
         shell: bash
         run: |
@@ -134,6 +171,12 @@ jobs:
           fi
           rustc --version > "dist/${name}.buildinfo"
 
+      # A .deb is the package Ubuntu and Debian install with apt.
+      # cargo-deb is a tool. It is not linked into the rmbin binary.
+      # The description, maintainer, installed files, and the empty dependency
+      # list live in Cargo.toml under [package.metadata.deb].
+      # CHANGE ME: that table, not this step, when the package name or the
+      # installed files change. The package name follows Cargo.toml `name`.
       # cargo-deb reads [package.metadata.deb] in Cargo.toml.
       # --no-build packs the binary this job already linked.
       # --compress-type gzip writes data.tar.gz. xz is cargo-deb's default
@@ -158,12 +201,18 @@ jobs:
           print("gzip deb", path)
           PY
 
+      # lipo is the macOS command that glues an Intel binary and an Apple
+      # silicon binary into one universal file. It is not an .app.
       # DISABLED for 0.0.1 alpha: lipo moved to release-macos-universal.yml,
       # which you run by hand after both Mac tarballs are on the release.
+      # CHANGE ME: that workflow's asset names if you rename the archives.
       # - name: Cross-compile Apple silicon and lipo
       #   if: matrix.target == 'x86_64-apple-darwin'
       #   run: lipo -create ... 
 
+      # An artifact is a file kept for a later job in this same run.
+      # The publish job downloads these. They are not the GitHub Release yet.
+      # CHANGE ME: `name` only if two jobs would upload the same artifact name.
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
@@ -194,8 +243,11 @@ jobs:
   #         name: universal-apple-darwin
   #         path: dist/rmbin-universal-apple-darwin.tar.gz
 
-  # Downloads every artifact, hashes the files a user would download, and
-  # opens the GitHub Release. Homebrew and apt are not touched.
+  # Checksums, then the GitHub Release.
+  # `needs: build` means "wait until every matrix leg has finished".
+  # If one leg failed, this job does not run, so a half-built release
+  # is not published. Homebrew and apt are not touched.
+  # CHANGE ME: `needs` if you rename the `build` job.
   publish:
     name: Checksums and GitHub Release
     needs: build
@@ -208,6 +260,13 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # SHA-256 is a fingerprint of a file. SHA256SUMS is a list of
+      # "fingerprint, then filename". A person who downloads the archive
+      # runs `sha256sum -c SHA256SUMS` and sees whether the bytes match.
+      # The file does not list itself. buildinfo notes are removed before
+      # the upload so they are not release assets.
+      # CHANGE ME: docs/RELEASE_NOTES_TEMPLATE.md is the release text.
+      # The word VERSION in that file is replaced with the tag, without the v.
       - name: SHA256SUMS and release notes
         run: |
           set -eu
@@ -231,6 +290,10 @@ jobs:
           # Do not attach the buildinfo files. They are notes, not downloads.
           rm -f ./*.buildinfo
 
+      # Create the GitHub Release for this tag and attach every file in dist/.
+      # `fail_on_unmatched_files` makes the job fail if the glob matches nothing,
+      # instead of publishing an empty release.
+      # CHANGE ME: `files` if your artifacts are not in dist/.
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*

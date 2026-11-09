@@ -6,6 +6,11 @@
 
 name: CI
 
+# This is the pull-request gate. It compiles and tests. It does not publish.
+# A pull request starts it, and so does a push to `main` after a merge.
+# A tag does not start it. Tags start release.yml instead.
+# CHANGE ME: the branch name under `push.branches` if your default branch
+# is not `main`.
 # One run per change. A push to a pull-request branch used to start this
 # workflow twice (once for `push`, once for `pull_request`). Pull requests
 # cover feature branches. Pushes to `main` cover the result after merge.
@@ -18,7 +23,10 @@ on:
 permissions:
   contents: read
 
-# One run per branch. A new push cancels the older run.
+# One run per branch. A new push cancels the older run of THIS workflow
+# only, because the group name includes the workflow name and the ref.
+# It does not cancel release-macos-intel.yml or release-apple-silicon.yml.
+# Those files use their own groups and cancel-in-progress: false.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -46,6 +54,11 @@ jobs:
           #   minos: "11.0"
 
           # Linux musl, native. The runner's CPU matches the binary.
+          # "Static" means the test binary carries musl instead of using
+          # the runner's glibc. CHANGE ME: `target` if you drop an architecture.
+          # `deb_smoke: true` is only on amd64. It installs cargo-deb and checks
+          # the .deb is gzip. The metadata it reads is [package.metadata.deb]
+          # in Cargo.toml, not a setting in this file.
           - name: Linux x86_64 musl
             os: ubuntu-24.04
             target: x86_64-unknown-linux-musl
@@ -117,6 +130,9 @@ jobs:
           fi
           cargo test --locked --target "${{ matrix.target }}"
 
+      # Fail if a networking crate appears in Cargo.lock, or if src/ or
+      # tests/ name the standard networking API. rmbin must not open a socket.
+      # CHANGE ME: packaging/banned-network-crates.txt when you review a new crate.
       - name: No network crates or socket API
         shell: bash
         run: ./packaging/check-no-network.sh "${{ matrix.target }}"
