@@ -41,15 +41,43 @@ jobs:
     timeout-minutes: 360
 
     steps:
+      # There is no actions/checkout here. This job only downloads two
+      # release files and glues them. gh normally learns the repository
+      # from the git checkout. Without a checkout it says
+      # "failed to run git: fatal: not a git repository".
+      # GH_REPO names the repository instead. CHANGE ME: you do not edit
+      # github.repository. GitHub fills that in. Change the two archive
+      # names below if you rename the Intel or Apple silicon tarballs.
       - name: Download both Mac builds and lipo
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ inputs.tag }}
         run: |
           set -eu
           version="${TAG#v}"
           intel="rmbin-v${version}-x86_64-apple-darwin.tar.gz"
           silicon="rmbin-v${version}-aarch64-apple-darwin.tar.gz"
+          # Check the release first. A missing release should say so here,
+          # not as a confusing download error a few lines later.
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "No GitHub Release named ${TAG}. Run the other release workflows first." >&2
+            exit 1
+          fi
+          # Name the missing file. Both can be missing. Say each one.
+          assets=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+          missing=0
+          if ! printf '%s\n' "$assets" | grep -qx "$intel"; then
+            echo "Missing ${intel} on release ${TAG}. Run Release macOS Intel first." >&2
+            missing=1
+          fi
+          if ! printf '%s\n' "$assets" | grep -qx "$silicon"; then
+            echo "Missing ${silicon} on release ${TAG}. Run Release Apple Silicon first." >&2
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
           mkdir -p intel silicon dist/root
           gh release download "$TAG" --pattern "$intel" --dir intel
           gh release download "$TAG" --pattern "$silicon" --dir silicon
@@ -63,10 +91,6 @@ jobs:
           tar -czf dist/rmbin-universal-apple-darwin.tar.gz -C dist/root rmbin
           (cd dist && shasum -a 256 rmbin-universal-apple-darwin.tar.gz > rmbin-universal-apple-darwin.tar.gz.sha256)
           cat dist/rmbin-universal-apple-darwin.tar.gz.sha256
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            echo "No GitHub Release named ${TAG}. Run the other release workflows first." >&2
-            exit 1
-          fi
           gh release upload "$TAG" \
             dist/rmbin-universal-apple-darwin.tar.gz \
             dist/rmbin-universal-apple-darwin.tar.gz.sha256 \
