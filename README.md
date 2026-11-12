@@ -1,6 +1,6 @@
 # rmbin
 
-rmbin removes files and folders you choose. Before deleting each file, it overwrites the file's contents once with a repeating text pattern (`lol` by default), forces that write to disk, and only then deletes the file. If any step fails, the file is kept and reported, never silently deleted. It shows exactly what it will do before it does anything, and reports what happened afterwards.
+rmbin is a careful plan for `rm` on Linux. You name files and folders. It prints what a later version would do: overwrite each file once with a repeating text pattern (`lol` by default), read those bytes back, rename the file, and only then delete it. **This version does not do any of that.** It does not overwrite, rename, move, or delete. `--yes` is ignored. The bin and free-space fill are later, because they change the disk.
 
 rmbin never connects to the internet. It has no updates, telemetry or tracking. The source, dependencies and release checksums are all public so you can check this yourself.
 
@@ -16,37 +16,41 @@ The MIT and Apache-2.0 licence texts already say there is no warranty. [DISCLAIM
 
 1. **No network.** The program never opens a socket. There is no update check, telemetry, crash report, analytics, or phone-home. CI fails if a networking crate appears in the tree, or if the source names the standard networking API.
 2. **Offline.** A built `rmbin` does not download anything. Builds use the committed `Cargo.lock` and `cargo --locked`. [docs/OFFLINE.md](docs/OFFLINE.md) explains `cargo vendor` for a machine with no network at all.
-3. **Transparent.** The limits banner is printed on every run. The plan is shown before any change. The report says what happened after, including `NOT securely deleted` when a step fails. Dependencies are the list in `Cargo.lock`. Release files get SHA-256 checksums. There is no hidden mode.
-4. **Honest about the disk.** One pass, the original length, a real `sync_all` (on macOS that asks for a full drive flush), then delete. If the overwrite fails, the file stays. Symlinks are not followed. The banner states the SSD, APFS, snapshot, and backup limits in the same run.
+3. **Transparent.** The limits banner is printed on every run. The plan is shown, and this version stops there. A refused path is `NOT securely deleted`. Dependencies are the list in `Cargo.lock`. Release files get SHA-256 checksums. There is no hidden mode.
+4. **Honest about the disk.** A later version would write one pass, the original length, then a real `sync_all` (on macOS that asks for a full drive flush), then delete. This version does not write. If that later overwrite fails, the file is meant to stay. Symlinks are not followed. The banner states the SSD, APFS, snapshot, and backup limits in the same run.
 
-This is **0.0.1 alpha**. Use it on throwaway test files, not on the only copy of something you need. There is no warranty.
+This is **0.0.9**, and it is dry-run only. There is no warranty. Do not expect a file to disappear.
 
-## What 0.0.1 does
+## What 0.0.9 does
 
-For each file it will remove:
+It prints a plan. The plan is what a later version would do, in this order:
 
-1. Open it in place, without truncating it on open, and without following a final symlink.
-2. Write a repeating text pattern for exactly the original number of bytes. Byte `i` is `pattern[i % length]`. The default pattern is `lol`. `--pattern 101` uses that text instead. Random bytes are never used.
-3. `sync_all`, truncate to zero, `sync_all` again.
-4. Unlink the name. On macOS and Linux the parent folder is synced after that.
+1. Refuse protected paths, and refuse to walk through a symlink in the middle of a path.
+2. List the files. A symlink is named, not followed. A file with more than one hard link is skipped. A directory on another device is not entered.
+3. Skip a sparse or compressed file, and say so.
+4. Say which filesystem the path is on, and warn that snapshots and backups are not deleted.
+5. On Linux, print the kernel's rotational flag when `/sys` has one. That flag can be wrong for a virtual disk.
+6. For each ordinary file, show the id card (length, links, device, inode) and the name a later rename would use. The name is the pattern repeated to the same length. It is not created.
+7. Say that a later version would read the visible bytes back, and that this version does not read file contents.
 
-Folders are removed afterwards, from the deepest one upward. Only the files inside are overwritten.
+`--dry-run` is the same plan, and it exits 0 when nothing would be skipped. Without `--dry-run` the plan is the same and the exit code is 2, so a script cannot treat the run as a successful delete.
 
-A symlink is removed as a link. The thing it points at is left alone. If a folder in the middle of the path you typed is itself a symlink, rmbin refuses that path. On macOS, `/tmp` and `/var` are symlinks; pass the path that does not go through them (often under `/private`).
+## What this version does not do
 
-`--dry-run` prints the plan and changes nothing. Without `--yes`, rmbin asks you to type `yes` once for the whole run.
+These are the dangerous points. They are left for a later version. The command does not call them.
 
-## What 0.0.1 does not do
-
-These are not implemented. Passing them as flags is an error. rmbin will not pretend they ran.
-
-- `--recycle` (move to the system bin, never overwrite)
-- `--verify` (read the bytes back)
+- overwrite, truncate, rename, or delete
+- `--recycle` (move to the system bin)
+- `--verify` as a performed read-back (the plan only describes it)
 - `--wipe-free-space`
-- a JSON plan, a journal, or rename-before-delete
+- a JSON plan file, a journal, or a log file
 - server or cloud cleanup
 
-Also not in this version: Windows hard-link counts, and skipping another volume on Windows. The banner says so on Windows. On macOS and Linux, a file with more than one hard link is skipped, and a directory on a different device is not entered.
+Passing `--recycle`, `--verify`, or `--wipe-free-space` is an error. Nothing is changed. `--yes` is ignored.
+
+On macOS, `/tmp` and `/var` are symlinks. A path through them is refused. Pass the path that does not go through them (often under `/private`).
+
+Windows still cannot count extra hard-link names, and it cannot yet tell that a folder is on another volume. The banner says so. This version does not write on Windows either.
 
 ## Commands
 
@@ -57,12 +61,12 @@ rmbin [--dry-run] [--yes] [--pattern TEXT] [--list PATHS] [PATH]...
 | Command | Effect |
 |---|---|
 | `rmbin --help` | Show help. Exit 0. |
-| `rmbin --version` | Print `rmbin 0.0.1`. Exit 0. |
+| `rmbin --version` | Print `rmbin 0.0.9`. Exit 0. |
 | `--list 'a.txt,build/;c.txt'` | Split on commas and semicolons. |
 | `rmbin 'odd,name.txt'` | One path. The comma is part of the name. |
 | `--pattern 101` | Repeating text. Default is `lol`. |
-| `--dry-run` | Print the banner and the plan. Change nothing. |
-| `--yes` | Do not ask for `yes`. For scripts. |
+| `--dry-run` | Print the banner and the plan. Exit 0 when nothing would be skipped. |
+| `--yes` | Ignored. This version cannot delete. Exit 2. |
 
 Quote paths so the shell does not split them.
 
@@ -70,9 +74,9 @@ Exit codes:
 
 | Code | Meaning |
 |---|---|
-| 0 | Every named path was securely deleted, or a dry run had nothing to refuse. |
-| 1 | A path was refused, missing, or **NOT securely deleted**. |
-| 2 | The confirmation was not `yes`, or the arguments were not understood. |
+| 0 | A dry run had nothing to refuse and nothing a later version would skip. |
+| 1 | A path was refused or missing, or a dry run found a path a later version would skip. |
+| 2 | You asked to delete (no `--dry-run`), or the arguments were not understood. Nothing was deleted. |
 
 ## Examples
 
@@ -88,10 +92,10 @@ A name that contains a comma:
 rmbin --yes 'odd,name.txt'
 ```
 
-Your own pattern, after reading the plan and typing `yes`:
+Your own pattern, still only a plan:
 
 ```bash
-rmbin --pattern 101 secret.txt
+rmbin --dry-run --pattern 101 secret.txt
 ```
 
 ## Protected paths
@@ -140,7 +144,7 @@ Publishing steps for the owner are in [docs/PUBLISHING.md](docs/PUBLISHING.md). 
 
 [`docs/TUTORIAL.md`](docs/TUTORIAL.md) is the reading order. [`docs/SKILL_PYRAMID.md`](docs/SKILL_PYRAMID.md) is the skill tree. The source files are numbered in their headers, one idea each.
 
-[`docs/COMPARISON.md`](docs/COMPARISON.md) is a draft. It does not name other programs. It is not a tested claim yet. Do not treat it as part of the 0.0.1 release notes.
+[`docs/COMPARISON.md`](docs/COMPARISON.md) is a draft. It does not name other programs. It describes later behaviour. This version only prints a plan.
 
 ## Privacy and security
 

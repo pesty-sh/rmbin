@@ -2,7 +2,7 @@
 
 The authors and contributors accept no liability for lost data or damaged hardware. Read [DISCLAIMER.md](DISCLAIMER.md) before you run rmbin.
 
-`rmbin` overwrites a file with a repeating text pattern, asks the operating system to flush that write, and then deletes the name. Assurance level B means best-effort overwrite. It is not a certified wipe.
+`rmbin` 0.0.9 prints a plan and does not overwrite, rename, move, or delete. The overwrite functions are still in the source for a later version. Assurance level B means best-effort overwrite. It is not a certified wipe, and this version does not claim to have done one.
 
 ## What a failure looks like
 
@@ -26,7 +26,7 @@ NIST SP 800-88 Rev 2: overwriting gives SSDs very little confidentiality protect
 
 A symlink that you name is removed. The target is not opened. A symlink in the middle of a path is refused, so the run does not walk through it. On macOS, `/tmp` and `/var` are symlinks.
 
-On macOS and Linux, `open` of the final component uses `O_NOFOLLOW`. A swap that replaces the file with a symlink between the plan and the open should fail the open. That is not a full race-proof design. Held directory handles are later work. A determined swap can still win on 0.0.1.
+On macOS and Linux, `open` of the final component uses `O_NOFOLLOW` in the overwrite code. The command does not call that code in this version. Held directory handles are later work. A determined swap can still win when a later version does write.
 
 Files with more than one hard link are skipped on macOS and Linux. Overwriting them would change every name. Windows 0.0.1 cannot read that count with safe standard-library calls, so a second name would be overwritten too. The Windows banner says this.
 

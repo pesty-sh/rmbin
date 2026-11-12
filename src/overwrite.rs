@@ -2,8 +2,13 @@
 //!
 //! What you'll learn: `OpenOptions`, `Write`, `Seek`, and `sync_all`.
 //! Builds on: Section 04 (the pattern) and Section 01 (errors).
-//! Used by: Section 10, which deletes the name only after this succeeds.
+//! Used by: a later version. Section 20 does not call this file.
 //! Functions: F11, F12.
+//!
+//! The command does not overwrite or truncate in this version. The tests
+//! in this file still run the steps in a temporary folder, so the later
+//! version has something already checked. Do not call these functions from
+//! the command until that later version.
 //!
 //! The file is opened without `truncate`, so opening it does not throw the
 //! old bytes away. We write exactly the original length, then call `sync_all`.

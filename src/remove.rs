@@ -2,8 +2,12 @@
 //!
 //! What you'll learn: `remove_file`, `remove_dir`, and doing the last step last.
 //! Builds on: Section 09. The bytes are already overwritten before we get here.
-//! Used by: the run that prints the report.
+//! Used by: a later version. Section 20 does not call this file.
 //! Functions: F13.
+//!
+//! The command does not rename or delete in this version. Rename, the
+//! bin, and filling free space are later. They are named in the plan and
+//! they are not done.
 //!
 //! A symlink is removed with the call that unlinks the link itself. On Unix that
 //! is `remove_file`, even when the link points at a folder. The target stays.

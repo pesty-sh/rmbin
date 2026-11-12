@@ -1,8 +1,9 @@
 # How rmbin compares (DRAFT — not for publication until the checklist below is done)
 
 > Status: draft, Nov 2026. Follows the comparison docs policy (`ROADMAP.md` §9, `RMBIN_SCOPE.md` §15).
-> rmbin itself is not built yet. Every "rmbin" entry is a *design goal* until tested, and must be re-worded
-> to "tested on <OS/filesystem>, <date>" before publishing.
+> 0.0.9 only prints a plan. It does not overwrite or delete. Every "rmbin" entry below is still a design
+> goal for a later version until it is tested, and must be re-worded to "tested on <OS/filesystem>, <date>"
+> before publishing.
 
 ## About this page
 - We read the public source code of six existing secure-delete tools to learn what works and what to

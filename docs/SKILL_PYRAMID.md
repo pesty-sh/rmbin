@@ -1,6 +1,8 @@
 # Skill pyramid
 
-Read modules from the bottom of this tree upward. Each layer uses the one below it. The function numbers are the roadmap ids in [`planning/ROADMAP.md`](planning/ROADMAP.md). 0.0.1 stops at F14.
+Read modules from the bottom of this tree upward. Each layer uses the one below it. The function numbers are the roadmap ids in [`planning/ROADMAP.md`](planning/ROADMAP.md).
+
+0.0.9 adds Sections 12–20. They only read. Section 20 does not call the overwrite or the delete. Those files stay in the tree for a later version.
 
 ```text
 L6  Concurrency, signals, long jobs, networking      → later: free-space wipe, server cleanup
@@ -31,4 +33,4 @@ graph BT
   L3A["L3 Fail closed — F06 F14"]
 ```
 
-0.0.1 teaches L0 through L3. L4 and above are named so you can see what is deliberately left out.
+0.0.1 taught L0 through L3, including a delete. 0.0.9 still has that code and does not run it. The new files are the dry-run checks: id card, read-back sentence, rename name, sparse, filesystem, disk flag, what may remain, and redaction. Recycle, journals, and free-space fill are still left out.

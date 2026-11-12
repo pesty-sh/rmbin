@@ -6,15 +6,15 @@
 //! Used by: Section 00 (`main`).
 //! Functions: F01.
 //!
-//! Flags in 0.0.1:
+//! Flags in this version:
 //! - positional paths, never split
 //! - `--list`, split on `,` and `;`
 //! - `--pattern`, default `lol`
-//! - `--dry-run`
-//! - `--yes`
+//! - `--dry-run` (the command is always a dry run; this flag sets the exit code)
+//! - `--yes` is accepted and ignored. This version cannot delete.
 //!
-//! `--recycle`, `--verify`, `--wipe-free-space`, JSON plans, renaming, and server
-//! cleanup are not flags yet. Passing an unknown flag is an error.
+//! `--recycle`, `--verify`, `--wipe-free-space`, JSON plans, and server cleanup
+//! are not flags yet. Passing an unknown flag is an error. Nothing is deleted.
 
 use std::path::PathBuf;
 
@@ -65,12 +65,16 @@ Examples:
 Quote paths so the shell does not split them.
 A comma or semicolon splits only the --list value.
 
-Not in 0.0.1: --recycle, --verify, --wipe-free-space, JSON plans,
-renaming before delete, and server cleanup. An unknown flag is an error.
+This version only prints a plan. It does not overwrite, rename, move, or delete.
+--yes is ignored. Deleting is a later version.
+
+Not in this version: --recycle, --verify, --wipe-free-space, JSON plans,
+and server cleanup. An unknown flag is an error.
 rmbin will not pretend those actions ran.
 
-Exit codes: 0 everything named was securely deleted, or a dry run found nothing
-to refuse. 1 a path was refused or NOT securely deleted. 2 confirmation was not yes.
+Exit codes: 0 a dry run found nothing to refuse. 1 a path was refused, or a
+dry run found a path a later version would skip. 2 you asked to delete and
+this version did not.
 ";
 
 /// Read arguments from the process.

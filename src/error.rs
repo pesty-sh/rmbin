@@ -62,6 +62,14 @@ pub enum Error {
     },
     /// The user did not type `yes`.
     Cancelled,
+    /// The user asked for a step this version will not do.
+    ///
+    /// Delete, recycle, and free-space fill are later. This version only
+    /// prints a plan.
+    NotInThisVersion {
+        /// A fixed word, such as `delete`. Not file contents.
+        action: &'static str,
+    },
     /// One or more paths were not securely deleted. `count` is how many.
     Incomplete {
         /// How many paths were not securely deleted.
@@ -77,7 +85,7 @@ impl Error {
     #[must_use]
     pub const fn exit_code(&self) -> u8 {
         match self {
-            Self::Cancelled => 2,
+            Self::Cancelled | Self::NotInThisVersion { .. } => 2,
             _ => 1,
         }
     }
@@ -142,6 +150,10 @@ impl fmt::Display for Error {
             Self::Cancelled => {
                 write!(f, "confirmation was not yes. Nothing was changed")
             }
+            Self::NotInThisVersion { action } => write!(
+                f,
+                "this version does not {action}. Nothing was changed. That step is a later version"
+            ),
             Self::Incomplete { count } => write!(
                 f,
                 "{count} path(s) were NOT securely deleted. The report above lists them"

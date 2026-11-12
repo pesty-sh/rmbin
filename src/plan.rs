@@ -5,6 +5,8 @@
 //! Used by: Section 08 (confirmation) and Section 10 (delete).
 //! Functions: F08, F09.
 //!
+//! The words are "would". This version prints the plan and does not do it.
+//!
 //! The plan only reads. It does not open a file for writing. Folders are listed
 //! bottom-up: a file is handled before the folder that contains it, so the
 //! folder is empty when we remove it.
@@ -57,15 +59,18 @@ impl Action {
     pub fn preview(&self) -> String {
         match &self.kind {
             ActionKind::OverwriteFile { bytes } => format!(
-                "overwrite {bytes} bytes, sync, truncate, then delete  {}",
+                "would overwrite {bytes} bytes, sync, read back, truncate, rename, then delete  {}",
                 self.path.display()
             ),
             ActionKind::DeleteSymlink => format!(
-                "delete symlink only; the target is not changed  {}",
+                "would delete symlink only; the target is not changed  {}",
                 self.path.display()
             ),
             ActionKind::RemoveDirectory => {
-                format!("remove folder after its entries  {}", self.path.display())
+                format!(
+                    "would remove folder after its entries  {}",
+                    self.path.display()
+                )
             }
             ActionKind::Skip { reason } => format!(
                 "skip; would be NOT securely deleted  {}  ({reason})",
