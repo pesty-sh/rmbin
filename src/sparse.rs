@@ -80,7 +80,9 @@ fn compressed(meta: &fs::Metadata) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::{self, File};
+    use std::fs;
+    #[cfg(unix)]
+    use std::fs::File;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};

@@ -11,6 +11,7 @@
 //! We do not skip the later overwrite because of it, and this version does
 //! not write.
 
+#[cfg(target_os = "linux")]
 use std::fs;
 use std::path::Path;
 

@@ -9,6 +9,7 @@
 //! a filesystem type such as `ext4`. We do not run a program and we do not
 //! change a mount. Snapshots are not deleted. This version does not write.
 
+#[cfg(target_os = "linux")]
 use std::fs;
 use std::path::{Path, PathBuf};
 
