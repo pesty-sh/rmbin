@@ -2,8 +2,13 @@
 //!
 //! What you'll learn: `OpenOptions`, `Write`, `Seek`, and `sync_all`.
 //! Builds on: Section 04 (the pattern) and Section 01 (errors).
-//! Used by: Section 10, which deletes the name only after this succeeds.
+//! Used by: a later version. Section 20 does not call this file.
 //! Functions: F11, F12.
+//!
+//! The command does not overwrite or truncate in this version. The tests
+//! in this file still run the steps in a temporary folder, so the later
+//! version has something already checked. Do not call these functions from
+//! the command until that later version.
 //!
 //! The file is opened without `truncate`, so opening it does not throw the
 //! old bytes away. We write exactly the original length, then call `sync_all`.
@@ -239,25 +244,10 @@ fn attach_path(path: &Path, error: Error) -> Error {
 mod tests {
     use std::fs::{self, OpenOptions};
     use std::io::{Read, Seek, SeekFrom};
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{overwrite_in_place, overwrite_then_truncate};
     use crate::pattern::Pattern;
-
-    fn temp_dir() -> PathBuf {
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let mut path = std::env::temp_dir();
-        path.push(format!("rmbin-overwrite-{n}-{nanos}"));
-        fs::create_dir_all(&path).expect("temp");
-        fs::canonicalize(&path).unwrap_or(path)
-    }
+    use crate::sandbox::Scratch;
 
     fn make_writable(path: &std::path::Path) {
         #[cfg(unix)]
@@ -285,7 +275,8 @@ mod tests {
 
     #[test]
     fn paint_keeps_the_exact_length_and_uses_the_pattern() {
-        let dir = temp_dir();
+        let scratch = Scratch::new("overwrite").expect("sandbox");
+        let dir = scratch.path().to_path_buf();
         let path = dir.join("notes.txt");
         let original_len = (64 * 1024) + 10;
         let original = vec![b'Q'; original_len];
@@ -307,12 +298,12 @@ mod tests {
             fs::metadata(&path).expect("meta").len(),
             original_len as u64
         );
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn custom_pattern_and_empty_file() {
-        let dir = temp_dir();
+        let scratch = Scratch::new("overwrite").expect("sandbox");
+        let dir = scratch.path().to_path_buf();
         let path = dir.join("short.txt");
         fs::write(&path, b"abcdef").expect("write");
         let pattern = Pattern::from_text("101").expect("pattern");
@@ -332,12 +323,12 @@ mod tests {
         overwrite_then_truncate(&empty, &pattern).expect("truncate");
         assert_eq!(fs::metadata(&empty).expect("meta").len(), 0);
         assert!(empty.exists());
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn symlink_is_not_overwritten() {
-        let dir = temp_dir();
+        let scratch = Scratch::new("overwrite").expect("sandbox");
+        let dir = scratch.path().to_path_buf();
         let target = dir.join("target.txt");
         fs::write(&target, b"secret").expect("write");
         let link = dir.join("link");
@@ -349,12 +340,12 @@ mod tests {
         let error = overwrite_then_truncate(&link, &pattern).expect_err("refused");
         assert!(error.to_string().contains("NOT securely deleted"));
         assert_eq!(fs::read(&target).expect("target"), b"secret");
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn read_only_file_is_kept_unchanged() {
-        let dir = temp_dir();
+        let scratch = Scratch::new("overwrite").expect("sandbox");
+        let dir = scratch.path().to_path_buf();
         let path = dir.join("locked.txt");
         fs::write(&path, b"secret").expect("write");
         let mut permissions = fs::metadata(&path).expect("meta").permissions();
@@ -369,6 +360,5 @@ mod tests {
             assert_eq!(fs::read(&path).expect("read"), b"secret");
         }
         make_writable(&path);
-        let _ = fs::remove_dir_all(&dir);
     }
 }

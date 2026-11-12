@@ -16,9 +16,9 @@ cargo clippy --all-targets --locked -- -D warnings
 
 `cargo --locked` refuses to change `Cargo.lock`. The running program has no network access. Do not add a crate that opens sockets. CI rejects those names, and it rejects C build scripts.
 
-## What belongs in 0.0.1
+## What belongs in 0.0.9
 
-One permanent delete: pattern overwrite, `sync_all`, truncate, delete, fail closed, and the limits banner. `--recycle`, read-back verify, free-space wipe, JSON plans, and server cleanup are later. Do not pretend a stub ran.
+A dry-run plan. Do not wire the command to overwrite, rename, recycle, fill free space, or delete. Those are a later version. Sections 09 and 10 stay in the tree so the later version has a place to start. Do not pretend a stub ran.
 
 ## Reports
 

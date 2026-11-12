@@ -29,12 +29,17 @@ pub fn write_banner(out: &mut impl Write) -> Result<()> {
     let version = env!("CARGO_PKG_VERSION");
     writeln!(
         out,
-        "No warranty. Deletion is permanent and cannot be undone. See DISCLAIMER.md."
+        "No warranty. This version only prints a plan. See DISCLAIMER.md."
     )
     .map_err(Error::report)?;
     writeln!(
         out,
-        "rmbin {version} alpha. Assurance level B: best-effort overwrite. This is not a certified wipe."
+        "rmbin {version} dry-run only. This version does not overwrite, rename, move, or delete."
+    )
+    .map_err(Error::report)?;
+    writeln!(
+        out,
+        "A later version would use assurance level B: best-effort overwrite. This is not a certified wipe."
     )
     .map_err(Error::report)?;
     writeln!(
@@ -68,7 +73,7 @@ pub fn write_banner(out: &mut impl Write) -> Result<()> {
     writeln!(out).map_err(Error::report)?;
     writeln!(
         out,
-        "One pass of repeating text is written. Random data is never used."
+        "A later version would write one pass of repeating text. Random data is never used. This version does not write."
     )
     .map_err(Error::report)?;
     writeln!(
@@ -83,7 +88,7 @@ pub fn write_banner(out: &mut impl Write) -> Result<()> {
 fn platform_note() -> &'static str {
     #[cfg(windows)]
     {
-        "This 0.0.1 Windows build cannot count extra hard-link names, and it cannot yet tell that a folder is on another volume. A second name for the same bytes would be overwritten too. Those checks are later."
+        "This Windows build cannot count extra hard-link names, and it cannot yet tell that a folder is on another volume. Those checks are later. This version does not write."
     }
     #[cfg(not(windows))]
     {

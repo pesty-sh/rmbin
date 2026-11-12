@@ -20,10 +20,23 @@ Rust module names cannot start with a digit, so the numbers live in the headers 
 | 09 | [`src/overwrite.rs`](../src/overwrite.rs) | `OpenOptions`, `Write`, `sync_all` | F11, F12 |
 | 10 | [`src/remove.rs`](../src/remove.rs) | delete names after the overwrite | F13 |
 | 11 | [`src/report.rs`](../src/report.rs) | the banner and `NOT securely deleted` | F06, F14 |
-| — | [`src/run.rs`](../src/run.rs) | call the sections in order | F01–F14 |
+| 12 | [`src/identity.rs`](../src/identity.rs) | the id card, read only | F19, F28 |
+| 13 | [`src/readback.rs`](../src/readback.rs) | the later read-back, as a sentence | F15 |
+| 14 | [`src/rename_name.rs`](../src/rename_name.rs) | the later file name, not created | F18 |
+| 15 | [`src/sparse.rs`](../src/sparse.rs) | sparse or compressed, read only | F24 |
+| 16 | [`src/snapshot.rs`](../src/snapshot.rs) | filesystem and snapshot warning | F25 |
+| 17 | [`src/disk.rs`](../src/disk.rs) | the kernel rotational flag | F30 |
+| 18 | [`src/remain.rs`](../src/remain.rs) | what may still hold old bytes | F23 |
+| 19 | [`src/redact.rs`](../src/redact.rs) | a report line with no file bytes | F17 |
+| 20 | [`src/core.rs`](../src/core.rs) | the dry-run, step by step | the plan |
+| 21 | [`src/sandbox.rs`](../src/sandbox.rs) | the sandbox folder, and the root refusal | the jail |
+| 22 | [`src/plan_text.rs`](../src/plan_text.rs) | fingerprint of the plan text | F21 |
+| 23 | [`src/journal.rs`](../src/journal.rs) | "planned, not done", no journal file | F22 |
+| 24 | [`src/names.rs`](../src/names.rs) | which names are in both lists | F23 |
+| — | [`src/run.rs`](../src/run.rs) | call Section 20 | — |
 | — | [`src/lib.rs`](../src/lib.rs) | the module map | — |
 
-[`SKILL_PYRAMID.md`](SKILL_PYRAMID.md) is the same idea drawn as a tree. Later files (recycle, JSON plans, free-space wipe) are not in 0.0.1. The roadmap snapshot is [`planning/ROADMAP.md`](planning/ROADMAP.md).
+Sections 09 and 10 are the overwrite and the delete. **Section 20 does not call them.** Recycle, a JSON plan, a journal, and free-space fill are later. The roadmap snapshot is [`planning/ROADMAP.md`](planning/ROADMAP.md). [`SKILL_PYRAMID.md`](SKILL_PYRAMID.md) is the same idea drawn as a tree.
 
 Rules in the code:
 
@@ -38,8 +51,8 @@ Use a made-up token, never a real one. Work in a new folder.
 1. **Pattern.** In `pattern.rs`, the tests check that byte 3 of `lol` is `l`. Add a test for `--pattern ab` at offset 5. You want `b`, because `5 % 2 == 1`.
 2. **List splitting.** Run `cargo test list_is_split`. Then try `rmbin --dry-run --list 'a.txt,b.txt'` on two real files.
 3. **Dry run.** Put `EXAMPLE_TOKEN_123` in `notes.txt`. Run `rmbin --dry-run notes.txt`. The file must still contain the token. The banner must mention SSDs and APFS.
-4. **Confirm.** Run `rmbin notes.txt` and type `no`. The file stays. Run it again and type `yes` only when you mean it.
-5. **Symlink.** `ln -s notes.txt link`. `rmbin --yes link` removes `link` and leaves `notes.txt`.
-6. **Fail closed.** `chmod a-w notes.txt`, then `rmbin --yes notes.txt`. The report says `NOT securely deleted` and the original bytes are still there. `chmod u+w notes.txt` when you are done.
+4. **Sandbox.** From the project folder, run `mkdir -p sandbox` if it is not there, and put `notes.txt` inside `sandbox/`. Run `rmbin sandbox/notes.txt`. The plan is printed. The file is still there. A path outside `sandbox/`, and a run as root, are refused. Exit code 2 when you ask it to delete. `--yes` does not change that.
+5. **Symlink.** `ln -s notes.txt link`. `rmbin --dry-run link` says it would delete the link only. `notes.txt` and `link` both stay.
+6. **Read-only.** `chmod a-w notes.txt`, then `rmbin --dry-run notes.txt`. The bytes are still there, because this version does not open the file for writing. `chmod u+w notes.txt` when you are done.
 
 `cargo test` runs these ideas on temporary folders so you do not have to risk a real file.

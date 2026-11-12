@@ -62,6 +62,23 @@ pub enum Error {
     },
     /// The user did not type `yes`.
     Cancelled,
+    /// The process is root. Root can destroy a drive, so this version stops.
+    Root,
+    /// The current folder is not inside a project that has a `sandbox` directory.
+    NoSandbox,
+    /// The path is not inside the project's `sandbox` folder.
+    OutsideSandbox {
+        /// The path that was refused.
+        path: PathBuf,
+    },
+    /// The user asked for a step this version will not do.
+    ///
+    /// Delete, recycle, and free-space fill are later. This version only
+    /// prints a plan.
+    NotInThisVersion {
+        /// A fixed word, such as `delete`. Not file contents.
+        action: &'static str,
+    },
     /// One or more paths were not securely deleted. `count` is how many.
     Incomplete {
         /// How many paths were not securely deleted.
@@ -77,7 +94,7 @@ impl Error {
     #[must_use]
     pub const fn exit_code(&self) -> u8 {
         match self {
-            Self::Cancelled => 2,
+            Self::Cancelled | Self::NotInThisVersion { .. } | Self::Root | Self::NoSandbox => 2,
             _ => 1,
         }
     }
@@ -142,6 +159,23 @@ impl fmt::Display for Error {
             Self::Cancelled => {
                 write!(f, "confirmation was not yes. Nothing was changed")
             }
+            Self::Root => write!(
+                f,
+                "refusing to run as root. Nothing was changed. Root could destroy this drive"
+            ),
+            Self::NoSandbox => write!(
+                f,
+                "no sandbox folder. Run rmbin from this project and put files in the sandbox folder next to Cargo.toml. Nothing was changed"
+            ),
+            Self::OutsideSandbox { path } => write!(
+                f,
+                "refusing path outside the sandbox: {}. Nothing was changed",
+                path.display()
+            ),
+            Self::NotInThisVersion { action } => write!(
+                f,
+                "this version does not {action}. Nothing was changed. That step is a later version"
+            ),
             Self::Incomplete { count } => write!(
                 f,
                 "{count} path(s) were NOT securely deleted. The report above lists them"

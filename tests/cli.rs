@@ -1,7 +1,8 @@
-//! Integration tests. Each one uses a real temporary folder.
+//! Integration tests. Each one uses a scratch folder inside `sandbox/`.
 //!
 //! `CARGO_BIN_EXE_rmbin` is the compiled `rmbin` binary. The library tests in
 //! `src/` check the pattern maths. These tests check what a person sees.
+//! Nothing is created in the system temp directory.
 
 #![forbid(unsafe_code)]
 
@@ -9,59 +10,22 @@ use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+
+use rmbin::sandbox::Scratch;
 
 struct Temp {
-    path: PathBuf,
+    scratch: Scratch,
 }
 
 impl Temp {
     fn new() -> Self {
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let mut path = std::env::temp_dir();
-        path.push(format!("rmbin-cli-{n}-{nanos}"));
-        fs::create_dir_all(&path).expect("temp");
-        let path = fs::canonicalize(&path).unwrap_or(path);
-        Self { path }
+        Self {
+            scratch: Scratch::new("cli").expect("sandbox"),
+        }
     }
 
     fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl Drop for Temp {
-    fn drop(&mut self) {
-        relax(&self.path);
-        let _ = fs::remove_dir_all(&self.path);
-    }
-}
-
-fn relax(path: &Path) {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mode = if path.is_dir() { 0o755 } else { 0o644 };
-        let _ = fs::set_permissions(path, fs::Permissions::from_mode(mode));
-        if let Ok(meta) = fs::symlink_metadata(path) {
-            if meta.is_dir() {
-                if let Ok(entries) = fs::read_dir(path) {
-                    for entry in entries.flatten() {
-                        relax(&entry.path());
-                    }
-                }
-            }
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = path;
+        self.scratch.path()
     }
 }
 
@@ -76,12 +40,14 @@ fn run(dir: &Path, args: &[&str], stdin_bytes: Option<&[u8]>) -> Output {
         Some(bytes) => {
             command.stdin(Stdio::piped());
             let mut child = command.spawn().expect("spawn rmbin");
-            child
-                .stdin
-                .as_mut()
-                .expect("stdin")
-                .write_all(bytes)
-                .expect("write stdin");
+            // This version does not read stdin. The child can exit before the
+            // write finishes, which is a broken pipe, not a failed run.
+            let write_result = child.stdin.as_mut().expect("stdin").write_all(bytes);
+            if let Err(error) = write_result {
+                if error.kind() != std::io::ErrorKind::BrokenPipe {
+                    panic!("write stdin: {error}");
+                }
+            }
             child.wait_with_output().expect("wait")
         }
         None => {
@@ -112,12 +78,13 @@ fn help_and_version() {
     assert!(help_text.contains("best-effort"));
     assert!(help_text.contains("DISCLAIMER.md"));
     assert!(help_text.contains("No warranty"));
-    assert!(help_text.contains("Not in 0.0.1"));
-    assert!(help_text.contains("0.0.1"));
+    assert!(help_text.contains("Not in this version"));
+    assert!(help_text.contains("does not overwrite"));
 
     let version = run(dir.path(), &["--version"], None);
     assert!(version.status.success());
-    assert!(text(&version.stdout).contains("rmbin 0.0.1"));
+    assert!(text(&version.stdout).contains("rmbin 0.0.10"));
+    assert!(help_text.contains("sandbox"));
 }
 
 #[test]
@@ -157,39 +124,44 @@ fn dry_run_changes_nothing_and_prints_the_banner() {
 }
 
 #[test]
-fn yes_deletes_a_file_and_decline_keeps_it() {
+fn yes_does_not_delete() {
     let dir = Temp::new();
     let kept = dir.path().join("kept.txt");
-    let gone = dir.path().join("gone.txt");
+    let named = dir.path().join("gone.txt");
     fs::write(&kept, b"stay").expect("write");
-    fs::write(&gone, b"go").expect("write");
+    fs::write(&named, b"go").expect("write");
 
     let declined = run(dir.path(), &[kept.to_str().expect("utf8")], Some(b"no\n"));
     assert!(!declined.status.success());
     assert_eq!(declined.status.code(), Some(2));
     assert!(combined(&declined).contains("Nothing was changed."));
+    assert!(combined(&declined).contains("does not delete"));
     assert_eq!(fs::read(&kept).expect("kept"), b"stay");
 
     let empty = run(dir.path(), &[kept.to_str().expect("utf8")], None);
-    assert!(!empty.status.success());
+    assert_eq!(empty.status.code(), Some(2));
     assert_eq!(fs::read(&kept).expect("kept"), b"stay");
 
-    let accepted = run(dir.path(), &[gone.to_str().expect("utf8")], Some(b"yes\n"));
-    assert!(accepted.status.success(), "{}", combined(&accepted));
-    assert!(text(&accepted.stdout).contains("securely deleted file"));
-    assert!(!gone.exists());
+    let accepted = run(dir.path(), &[named.to_str().expect("utf8")], Some(b"yes\n"));
+    assert_eq!(accepted.status.code(), Some(2), "{}", combined(&accepted));
+    assert!(combined(&accepted).contains("does not delete"));
+    assert!(!combined(&accepted).contains("securely deleted file"));
+    assert_eq!(fs::read(&named).expect("still there"), b"go");
     assert!(kept.exists());
 }
 
 #[test]
-fn yes_flag_deletes_without_a_prompt() {
+fn yes_flag_is_ignored_and_the_file_stays() {
     let dir = Temp::new();
     let file = dir.path().join("notes.txt");
     fs::write(&file, b"go").expect("write");
     let output = run(dir.path(), &["--yes", file.to_str().expect("utf8")], None);
-    assert!(output.status.success(), "{}", combined(&output));
-    assert!(!file.exists());
-    assert!(text(&output.stdout).contains("best-effort"));
+    assert_eq!(output.status.code(), Some(2), "{}", combined(&output));
+    assert_eq!(fs::read(&file).expect("kept"), b"go");
+    let stdout = text(&output.stdout);
+    assert!(stdout.contains("Ignoring --yes"));
+    assert!(stdout.contains("best-effort"));
+    assert!(stdout.contains("Nothing was changed."));
 }
 
 #[test]
@@ -200,15 +172,19 @@ fn list_is_split_and_positional_names_are_not() {
     let odd = dir.path().join("odd,name.txt");
     fs::write(&odd, b"odd").expect("write");
 
-    let listed = run(dir.path(), &["--yes", "--list", "a.txt;b.txt"], None);
+    let listed = run(dir.path(), &["--dry-run", "--list", "a.txt;b.txt"], None);
     assert!(listed.status.success(), "{}", combined(&listed));
-    assert!(!dir.path().join("a.txt").exists());
-    assert!(!dir.path().join("b.txt").exists());
-    assert!(odd.exists());
+    let listed_text = text(&listed.stdout);
+    assert!(listed_text.contains("a.txt"));
+    assert!(listed_text.contains("b.txt"));
+    assert!(dir.path().join("a.txt").exists());
+    assert!(dir.path().join("b.txt").exists());
+    assert_eq!(fs::read(&odd).expect("odd"), b"odd");
 
-    let positional = run(dir.path(), &["--yes", "odd,name.txt"], None);
+    let positional = run(dir.path(), &["--dry-run", "odd,name.txt"], None);
     assert!(positional.status.success(), "{}", combined(&positional));
-    assert!(!odd.exists());
+    assert!(text(&positional.stdout).contains("odd,name.txt"));
+    assert_eq!(fs::read(&odd).expect("odd"), b"odd");
     assert!(!dir.path().join("odd").exists());
     assert!(!dir.path().join("name.txt").exists());
 }
@@ -234,9 +210,18 @@ fn folder_is_removed_bottom_up_including_spaces_and_unicode() {
     fs::write(root.join("café.txt"), "é".as_bytes()).expect("write");
     fs::create_dir(root.join("empty")).expect("empty");
 
-    let output = run(dir.path(), &["--yes", root.to_str().expect("utf8")], None);
+    let output = run(
+        dir.path(),
+        &["--dry-run", root.to_str().expect("utf8")],
+        None,
+    );
     assert!(output.status.success(), "{}", combined(&output));
-    assert!(!root.exists());
+    let stdout = text(&output.stdout);
+    assert!(stdout.contains("b.txt"));
+    assert!(stdout.contains("my file.txt"));
+    assert!(stdout.contains("would remove folder"));
+    assert!(root.exists());
+    assert_eq!(fs::read(root.join("sub").join("b.txt")).expect("b"), b"bbb");
 }
 
 #[test]
@@ -246,10 +231,16 @@ fn symlink_to_a_file_is_removed_and_the_target_stays() {
     fs::write(&target, b"EXAMPLE_TOKEN_123").expect("write");
     let link = dir.path().join("link");
     symlink_file(&target, &link);
-    let output = run(dir.path(), &["--yes", link.to_str().expect("utf8")], None);
+    let output = run(
+        dir.path(),
+        &["--dry-run", link.to_str().expect("utf8")],
+        None,
+    );
     assert!(output.status.success(), "{}", combined(&output));
-    assert!(!link.exists());
+    assert!(text(&output.stdout).contains("would delete symlink only"));
+    assert!(link.exists());
     assert_eq!(fs::read(&target).expect("target"), b"EXAMPLE_TOKEN_123");
+    assert!(!combined(&output).contains("EXAMPLE_TOKEN_123"));
 }
 
 #[test]
@@ -260,9 +251,14 @@ fn symlink_to_a_directory_is_not_entered() {
     fs::write(real.join("file.txt"), b"inside").expect("write");
     let link = dir.path().join("linkdir");
     symlink_dir(&real, &link);
-    let output = run(dir.path(), &["--yes", link.to_str().expect("utf8")], None);
+    let output = run(
+        dir.path(),
+        &["--dry-run", link.to_str().expect("utf8")],
+        None,
+    );
     assert!(output.status.success(), "{}", combined(&output));
-    assert!(!link.exists());
+    assert!(text(&output.stdout).contains("would delete symlink only"));
+    assert!(link.exists());
     assert_eq!(fs::read(real.join("file.txt")).expect("inside"), b"inside");
 }
 
@@ -296,10 +292,16 @@ fn tree_does_not_follow_a_symlink_to_an_outside_file() {
     fs::create_dir(&root).expect("dir");
     fs::write(root.join("notes.txt"), b"notes").expect("write");
     symlink_file(&outside, &root.join("link"));
-    let output = run(dir.path(), &["--yes", root.to_str().expect("utf8")], None);
+    let output = run(
+        dir.path(),
+        &["--dry-run", root.to_str().expect("utf8")],
+        None,
+    );
     assert!(output.status.success(), "{}", combined(&output));
-    assert!(!root.exists());
+    assert!(text(&output.stdout).contains("would delete symlink only"));
+    assert!(root.exists());
     assert_eq!(fs::read(&outside).expect("outside"), b"EXAMPLE_TOKEN_123");
+    assert!(!combined(&output).contains("EXAMPLE_TOKEN_123"));
 }
 
 #[test]
@@ -382,37 +384,32 @@ fn read_only_file_is_not_deleted() {
         return;
     }
     let output = run(dir.path(), &["--yes", file.to_str().expect("utf8")], None);
-    assert!(!output.status.success(), "{}", combined(&output));
-    assert!(combined(&output).contains("NOT securely deleted"));
+    assert_eq!(output.status.code(), Some(2), "{}", combined(&output));
+    assert!(combined(&output).contains("Nothing was changed."));
+    assert!(!combined(&output).contains("securely deleted file"));
     assert_eq!(fs::read(&file).expect("kept"), b"secret");
     make_writable(&file);
 }
 
 #[test]
-fn failure_stops_the_run_and_leaves_the_rest() {
+fn a_directory_request_does_not_change_children() {
     let dir = Temp::new();
-    let first = dir.path().join("0-locked.txt");
+    let first = dir.path().join("0-first.txt");
     let second = dir.path().join("1-later.txt");
     fs::write(&first, b"keep-first").expect("write");
     fs::write(&second, b"keep-second").expect("write");
-    let mut permissions = fs::metadata(&first).expect("meta").permissions();
-    permissions.set_readonly(true);
-    fs::set_permissions(&first, permissions).expect("chmod");
-    if OpenOptions::new().write(true).open(&first).is_ok() {
-        return;
-    }
     let output = run(
         dir.path(),
         &["--yes", dir.path().to_str().expect("utf8")],
         None,
     );
-    assert!(!output.status.success(), "{}", combined(&output));
-    let report = text(&output.stdout);
-    assert!(report.contains("NOT securely deleted"));
-    assert!(report.contains("not attempted"));
+    assert_eq!(output.status.code(), Some(2), "{}", combined(&output));
+    let report = combined(&output);
+    assert!(report.contains("Nothing was changed."));
+    assert!(!report.contains("not attempted"));
+    assert!(!report.contains("securely deleted file"));
     assert_eq!(fs::read(&first).expect("first"), b"keep-first");
     assert_eq!(fs::read(&second).expect("second"), b"keep-second");
-    make_writable(&first);
 }
 
 fn make_writable(path: &Path) {
@@ -436,7 +433,7 @@ fn make_writable(path: &Path) {
 
 #[cfg(unix)]
 #[test]
-fn unlink_failure_after_overwrite_keeps_the_name() {
+fn a_locked_folder_is_not_a_reason_to_truncate() {
     use std::os::unix::fs::PermissionsExt;
     let dir = Temp::new();
     let folder = dir.path().join("box");
@@ -445,10 +442,10 @@ fn unlink_failure_after_overwrite_keeps_the_name() {
     fs::write(&file, b"hello").expect("write");
     fs::set_permissions(&folder, fs::Permissions::from_mode(0o555)).expect("chmod");
     let output = run(dir.path(), &["--yes", file.to_str().expect("utf8")], None);
-    assert!(!output.status.success(), "{}", combined(&output));
-    assert!(combined(&output).contains("NOT securely deleted"));
+    assert_eq!(output.status.code(), Some(2), "{}", combined(&output));
+    assert!(combined(&output).contains("Nothing was changed."));
     assert!(file.exists());
-    assert_eq!(fs::metadata(&file).expect("meta").len(), 0);
+    assert_eq!(fs::read(&file).expect("bytes"), b"hello");
 }
 
 #[cfg(unix)]
@@ -488,8 +485,9 @@ fn zero_byte_file_is_deleted() {
     let file = dir.path().join("empty.txt");
     fs::write(&file, b"").expect("write");
     let output = run(dir.path(), &["--yes", file.to_str().expect("utf8")], None);
-    assert!(output.status.success(), "{}", combined(&output));
-    assert!(!file.exists());
+    assert_eq!(output.status.code(), Some(2), "{}", combined(&output));
+    assert!(file.exists());
+    assert_eq!(fs::metadata(&file).expect("meta").len(), 0);
 }
 
 #[test]
@@ -538,6 +536,130 @@ fn custom_pattern_flag_is_what_the_plan_shows() {
     assert!(output.status.success(), "{}", combined(&output));
     assert!(text(&output.stdout).contains("Pattern: '101'"));
     assert_eq!(fs::read(&file).expect("unchanged"), b"abcd");
+}
+
+#[test]
+fn plan_names_later_steps_and_keeps_the_secret() {
+    let dir = Temp::new();
+    let file = dir.path().join("secret.txt");
+    fs::write(&file, b"EXAMPLE_TOKEN_123").expect("write");
+    let output = run(
+        dir.path(),
+        &[
+            "--dry-run",
+            "--pattern",
+            "lol",
+            file.to_str().expect("utf8"),
+        ],
+        None,
+    );
+    assert!(output.status.success(), "{}", combined(&output));
+    let stdout = text(&output.stdout);
+    assert!(stdout.contains("would overwrite"));
+    assert!(stdout.contains("read back"));
+    assert!(stdout.contains("later rename, not done"));
+    assert!(stdout.contains("lollolloll"));
+    assert!(stdout.contains("id card"));
+    assert!(stdout.contains("does not read file contents"));
+    assert!(stdout.contains("Nothing was removed"));
+    assert!(stdout.contains("free-space fill"));
+    assert!(!stdout.contains("EXAMPLE_TOKEN_123"));
+    assert_eq!(fs::read(&file).expect("kept"), b"EXAMPLE_TOKEN_123");
+    assert!(!dir.path().join("lollolloll").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_sparse_file_is_skipped_in_the_plan_and_left_in_place() {
+    let dir = Temp::new();
+    let file = dir.path().join("hole.bin");
+    let handle = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&file)
+        .expect("create");
+    handle.set_len(1_000_000).expect("len");
+    drop(handle);
+    let output = run(
+        dir.path(),
+        &["--dry-run", file.to_str().expect("utf8")],
+        None,
+    );
+    assert!(!output.status.success(), "{}", combined(&output));
+    assert!(combined(&output).contains("sparse or compressed"));
+    assert!(combined(&output).contains("did not write"));
+    assert_eq!(fs::metadata(&file).expect("meta").len(), 1_000_000);
+}
+
+#[test]
+fn wipe_flag_is_rejected_and_changes_nothing() {
+    let dir = Temp::new();
+    let file = dir.path().join("notes.txt");
+    fs::write(&file, b"secret").expect("write");
+    let output = run(
+        dir.path(),
+        &["--wipe-free-space", file.to_str().expect("utf8")],
+        None,
+    );
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(fs::read(&file).expect("kept"), b"secret");
+}
+
+#[test]
+fn the_plan_names_the_filesystem_without_writing() {
+    let dir = Temp::new();
+    let file = dir.path().join("notes.txt");
+    fs::write(&file, b"abc").expect("write");
+    let output = run(
+        dir.path(),
+        &["--dry-run", file.to_str().expect("utf8")],
+        None,
+    );
+    assert!(output.status.success(), "{}", combined(&output));
+    let stdout = text(&output.stdout);
+    assert!(
+        stdout.contains("is on ") || stdout.contains("Could not see which filesystem"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("does not change the disk"));
+    assert_eq!(fs::read(&file).expect("kept"), b"abc");
+}
+
+#[test]
+fn a_project_file_outside_the_sandbox_is_left_alone() {
+    let dir = Temp::new();
+    let cargo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+    let before = fs::read(&cargo).expect("read cargo");
+    let output = run(
+        dir.path(),
+        &["--dry-run", cargo.to_str().expect("utf8")],
+        None,
+    );
+    assert!(!output.status.success(), "{}", combined(&output));
+    assert!(combined(&output).contains("outside the sandbox"));
+    assert!(combined(&output).contains("Nothing was changed."));
+    assert!(!combined(&output).contains("Plan."));
+    assert_eq!(fs::read(&cargo).expect("read cargo"), before);
+}
+
+#[test]
+fn a_folder_with_no_project_sandbox_is_refused() {
+    let outside = std::env::temp_dir();
+    let leaked = outside.join("rmbin-should-not-create.txt");
+    let output = run(
+        &outside,
+        &["--dry-run", "rmbin-should-not-create.txt"],
+        None,
+    );
+    let created = leaked.exists();
+    if created {
+        let _ = fs::remove_file(&leaked);
+    }
+    assert!(!created, "the command created a file outside the project");
+    assert!(!output.status.success(), "{}", combined(&output));
+    assert!(combined(&output).contains("no sandbox"));
+    assert!(combined(&output).contains("Nothing was changed."));
 }
 
 fn symlink_file(target: &Path, link: &Path) {

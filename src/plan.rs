@@ -5,6 +5,8 @@
 //! Used by: Section 08 (confirmation) and Section 10 (delete).
 //! Functions: F08, F09.
 //!
+//! The words are "would". This version prints the plan and does not do it.
+//!
 //! The plan only reads. It does not open a file for writing. Folders are listed
 //! bottom-up: a file is handled before the folder that contains it, so the
 //! folder is empty when we remove it.
@@ -57,15 +59,18 @@ impl Action {
     pub fn preview(&self) -> String {
         match &self.kind {
             ActionKind::OverwriteFile { bytes } => format!(
-                "overwrite {bytes} bytes, sync, truncate, then delete  {}",
+                "would overwrite {bytes} bytes, sync, read back, truncate, rename, then delete  {}",
                 self.path.display()
             ),
             ActionKind::DeleteSymlink => format!(
-                "delete symlink only; the target is not changed  {}",
+                "would delete symlink only; the target is not changed  {}",
                 self.path.display()
             ),
             ActionKind::RemoveDirectory => {
-                format!("remove folder after its entries  {}", self.path.display())
+                format!(
+                    "would remove folder after its entries  {}",
+                    self.path.display()
+                )
             }
             ActionKind::Skip { reason } => format!(
                 "skip; would be NOT securely deleted  {}  ({reason})",
@@ -171,28 +176,14 @@ fn walk(
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{build, ActionKind};
-
-    fn temp_dir() -> PathBuf {
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let mut path = std::env::temp_dir();
-        path.push(format!("rmbin-plan-{n}-{nanos}"));
-        fs::create_dir_all(&path).expect("temp");
-        fs::canonicalize(&path).unwrap_or(path)
-    }
+    use crate::sandbox::Scratch;
 
     #[test]
     fn folders_are_listed_bottom_up_and_symlinks_are_not_entered() {
-        let root = temp_dir();
+        let scratch = Scratch::new("plan").expect("sandbox");
+        let root = scratch.path().to_path_buf();
         let sub = root.join("sub");
         fs::create_dir(&sub).expect("dir");
         fs::write(sub.join("b.txt"), b"bbbb").expect("write");
@@ -218,6 +209,5 @@ mod tests {
         assert!(actions.iter().any(|action| {
             matches!(action.kind, ActionKind::DeleteSymlink) && action.path == link
         }));
-        let _ = fs::remove_dir_all(&root);
     }
 }

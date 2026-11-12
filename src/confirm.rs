@@ -2,8 +2,12 @@
 //!
 //! What you'll learn: reading one line from standard input.
 //! Builds on: Section 07, because the plan is what the person confirms.
-//! Used by: the run in Section 12, unless `--yes` or `--dry-run` is set.
+//! Used by: a later version. Section 20 does not call this file.
 //! Functions: F10.
+//!
+//! This version does not ask you to type `yes`. A yes would sound like
+//! permission to delete, and this version does not delete. The function
+//! stays so a later version can ask one question before it changes anything.
 //!
 //! The only accepted answer is the word `yes`, in lowercase, after trimming
 //! space. Anything else, including an empty reply, leaves every file in place.

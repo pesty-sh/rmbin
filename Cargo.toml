@@ -1,6 +1,6 @@
 [package]
 name = "rmbin"
-version = "0.0.1"
+version = "0.0.10"
 edition = "2021"
 rust-version = "1.85"
 description = "Offline file and folder remover. Overwrites with a plain text pattern, syncs to disk, then deletes. No network access, no telemetry. States its limits."
