@@ -83,39 +83,25 @@ mod tests {
     use std::fs;
     #[cfg(unix)]
     use std::fs::File;
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::skip_reason;
-
-    fn temp_dir() -> PathBuf {
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let mut path = std::env::temp_dir();
-        path.push(format!("rmbin-sparse-{n}-{nanos}"));
-        fs::create_dir_all(&path).expect("temp");
-        fs::canonicalize(&path).unwrap_or(path)
-    }
+    use crate::sandbox::Scratch;
 
     #[test]
     fn a_small_file_is_not_called_sparse() {
-        let dir = temp_dir();
+        let scratch = Scratch::new("sparse").expect("sandbox");
+        let dir = scratch.path();
         let file = dir.join("notes.txt");
         fs::write(&file, b"hello").expect("write");
         assert_eq!(skip_reason(&file).expect("reason"), None);
         assert_eq!(fs::read(&file).expect("read"), b"hello");
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[cfg(unix)]
     #[test]
     fn a_hole_is_reported_and_left_alone() {
-        let dir = temp_dir();
+        let scratch = Scratch::new("sparse-hole").expect("sandbox");
+        let dir = scratch.path();
         let file = dir.join("hole.bin");
         let handle = File::create(&file).expect("create");
         handle.set_len(1_000_000).expect("len");
@@ -123,6 +109,5 @@ mod tests {
         let reason = skip_reason(&file).expect("reason");
         assert!(reason.is_some(), "expected a sparse file");
         assert_eq!(fs::metadata(&file).expect("meta").len(), 1_000_000);
-        let _ = fs::remove_dir_all(&dir);
     }
 }

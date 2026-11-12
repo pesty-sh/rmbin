@@ -29,6 +29,10 @@ Rust module names cannot start with a digit, so the numbers live in the headers 
 | 18 | [`src/remain.rs`](../src/remain.rs) | what may still hold old bytes | F23 |
 | 19 | [`src/redact.rs`](../src/redact.rs) | a report line with no file bytes | F17 |
 | 20 | [`src/core.rs`](../src/core.rs) | the dry-run, step by step | the plan |
+| 21 | [`src/sandbox.rs`](../src/sandbox.rs) | the sandbox folder, and the root refusal | the jail |
+| 22 | [`src/plan_text.rs`](../src/plan_text.rs) | fingerprint of the plan text | F21 |
+| 23 | [`src/journal.rs`](../src/journal.rs) | "planned, not done", no journal file | F22 |
+| 24 | [`src/names.rs`](../src/names.rs) | which names are in both lists | F23 |
 | — | [`src/run.rs`](../src/run.rs) | call Section 20 | — |
 | — | [`src/lib.rs`](../src/lib.rs) | the module map | — |
 
@@ -47,7 +51,7 @@ Use a made-up token, never a real one. Work in a new folder.
 1. **Pattern.** In `pattern.rs`, the tests check that byte 3 of `lol` is `l`. Add a test for `--pattern ab` at offset 5. You want `b`, because `5 % 2 == 1`.
 2. **List splitting.** Run `cargo test list_is_split`. Then try `rmbin --dry-run --list 'a.txt,b.txt'` on two real files.
 3. **Dry run.** Put `EXAMPLE_TOKEN_123` in `notes.txt`. Run `rmbin --dry-run notes.txt`. The file must still contain the token. The banner must mention SSDs and APFS.
-4. **No delete.** Run `rmbin notes.txt`. The plan is printed. The file is still there. Exit code 2. `--yes` does not change that.
+4. **Sandbox.** From the project folder, run `mkdir -p sandbox` if it is not there, and put `notes.txt` inside `sandbox/`. Run `rmbin sandbox/notes.txt`. The plan is printed. The file is still there. A path outside `sandbox/`, and a run as root, are refused. Exit code 2 when you ask it to delete. `--yes` does not change that.
 5. **Symlink.** `ln -s notes.txt link`. `rmbin --dry-run link` says it would delete the link only. `notes.txt` and `link` both stay.
 6. **Read-only.** `chmod a-w notes.txt`, then `rmbin --dry-run notes.txt`. The bytes are still there, because this version does not open the file for writing. `chmod u+w notes.txt` when you are done.
 

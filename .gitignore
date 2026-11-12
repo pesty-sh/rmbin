@@ -1,3 +1,7 @@
+# Scratch files for tests. The folder stays. Its contents must not be committed.
+/sandbox/*
+!/sandbox/.gitkeep
+
 # Build output
 /target/
 /dist/

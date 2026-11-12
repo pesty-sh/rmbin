@@ -67,6 +67,8 @@ A comma or semicolon splits only the --list value.
 
 This version only prints a plan. It does not overwrite, rename, move, or delete.
 --yes is ignored. Deleting is a later version.
+It refuses to run as root. It only plans paths inside the sandbox folder
+next to Cargo.toml. Anything else is refused, and nothing is changed.
 
 Not in this version: --recycle, --verify, --wipe-free-space, JSON plans,
 and server cleanup. An unknown flag is an error.

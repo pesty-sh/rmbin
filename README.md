@@ -19,7 +19,9 @@ The MIT and Apache-2.0 licence texts already say there is no warranty. [DISCLAIM
 3. **Transparent.** The limits banner is printed on every run. The plan is shown, and this version stops there. A refused path is `NOT securely deleted`. Dependencies are the list in `Cargo.lock`. Release files get SHA-256 checksums. There is no hidden mode.
 4. **Honest about the disk.** A later version would write one pass, the original length, then a real `sync_all` (on macOS that asks for a full drive flush), then delete. This version does not write. If that later overwrite fails, the file is meant to stay. Symlinks are not followed. The banner states the SSD, APFS, snapshot, and backup limits in the same run.
 
-This is **0.0.9**, and it is dry-run only. There is no warranty. Do not expect a file to disappear.
+This is **0.0.10**, and it is dry-run only. There is no warranty. Do not expect a file to disappear.
+
+Put the files you want to plan in the `sandbox` folder next to `Cargo.toml`. `rmbin` refuses every other path. It also refuses to run as root, so it cannot be used to wipe this drive. The `sandbox` folder itself is not a target.
 
 ## What 0.0.9 does
 
@@ -61,7 +63,7 @@ rmbin [--dry-run] [--yes] [--pattern TEXT] [--list PATHS] [PATH]...
 | Command | Effect |
 |---|---|
 | `rmbin --help` | Show help. Exit 0. |
-| `rmbin --version` | Print `rmbin 0.0.9`. Exit 0. |
+| `rmbin --version` | Print `rmbin 0.0.10`. Exit 0. |
 | `--list 'a.txt,build/;c.txt'` | Split on commas and semicolons. |
 | `rmbin 'odd,name.txt'` | One path. The comma is part of the name. |
 | `--pattern 101` | Repeating text. Default is `lol`. |

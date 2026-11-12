@@ -1,6 +1,13 @@
 # Changelog
 
-The binary version is **0.0.9**. It only prints a plan. 0.0.2 through 0.0.9 are the safe steps below. They were not tagged separately. Deleting, renaming, the bin, and filling free space are a later version.
+The binary version is **0.0.10**. It only prints a plan, and only for paths inside the project's `sandbox` folder. It refuses to run as root. 0.0.2 through 0.0.10 were not tagged separately. Deleting, renaming, the bin, and filling free space are a later version.
+
+## 0.0.10 — sandbox folder, still a dry run
+
+- The command refuses root. On Linux the effective uid is read from `/proc/self/status`. If that file cannot be read, the command stops.
+- It plans only paths inside the `sandbox` directory next to `Cargo.toml`. The sandbox folder itself is refused, so a later delete cannot remove the container. A path outside it is refused and nothing is changed.
+- Tests create their scratch folders in `sandbox/` and delete only that scratch folder. They do not use the system temp directory.
+- Five portable checks, none of which read a drive format or write a log: a read-back offset (`src/readback.rs`), a secret screen (`src/redact.rs`), a plan fingerprint (`src/plan_text.rs`), a "planned, not done" journal line (`src/journal.rs`), and a name-list difference (`src/names.rs`).
 
 ## 0.0.9 — what may remain, still a dry run
 

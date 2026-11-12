@@ -176,28 +176,14 @@ fn walk(
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{build, ActionKind};
-
-    fn temp_dir() -> PathBuf {
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let mut path = std::env::temp_dir();
-        path.push(format!("rmbin-plan-{n}-{nanos}"));
-        fs::create_dir_all(&path).expect("temp");
-        fs::canonicalize(&path).unwrap_or(path)
-    }
+    use crate::sandbox::Scratch;
 
     #[test]
     fn folders_are_listed_bottom_up_and_symlinks_are_not_entered() {
-        let root = temp_dir();
+        let scratch = Scratch::new("plan").expect("sandbox");
+        let root = scratch.path().to_path_buf();
         let sub = root.join("sub");
         fs::create_dir(&sub).expect("dir");
         fs::write(sub.join("b.txt"), b"bbbb").expect("write");
@@ -223,6 +209,5 @@ mod tests {
         assert!(actions.iter().any(|action| {
             matches!(action.kind, ActionKind::DeleteSymlink) && action.path == link
         }));
-        let _ = fs::remove_dir_all(&root);
     }
 }

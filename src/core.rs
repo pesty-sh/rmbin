@@ -25,14 +25,18 @@ use crate::disk;
 use crate::error::{Error, Result};
 use crate::identity;
 use crate::input;
+use crate::journal;
+use crate::names;
 use crate::pattern::Pattern;
 use crate::plan::{self, Action, ActionKind};
+use crate::plan_text;
 use crate::protect::Guard;
 use crate::readback;
 use crate::redact;
 use crate::remain;
 use crate::rename_name;
 use crate::report;
+use crate::sandbox;
 use crate::snapshot;
 use crate::sparse;
 
@@ -53,17 +57,36 @@ pub fn execute(request: &Cli, input: &mut impl BufRead, out: &mut impl Write) ->
     // Step 1. Say what this version will not do, and state the disk limits.
     report::write_banner(out)?;
 
-    // Step 2. Check the pattern and the path list. Still no disk writes.
+    // Step 2. Stop if this process is root, then find the sandbox folder.
+    // Root could destroy the drive. Paths outside the sandbox are refused
+    // before a plan is printed.
+    if sandbox::running_as_root() {
+        writeln!(out, "Nothing was changed.").map_err(Error::report)?;
+        return Err(Error::Root);
+    }
+    let sandbox = match sandbox::locate() {
+        Ok(sandbox) => sandbox,
+        Err(error) => {
+            writeln!(out, "Nothing was changed.").map_err(Error::report)?;
+            return Err(error);
+        }
+    };
+
+    // Step 3. Check the pattern and the path list. Still no disk writes.
     let pattern = Pattern::from_text(&request.pattern)?;
     let typed = input::collect_paths(request.list.as_deref(), &request.paths)?;
     let guard = Guard::load();
 
-    // Step 3. Resolve each path. Refuse protected places before a plan.
+    // Step 4. Resolve each path. Refuse protected places, then refuse
+    // anything that is not inside the sandbox.
     let mut problems = Vec::new();
     let mut roots = Vec::new();
     for path in &typed {
         match prepare(&guard, path) {
-            Ok(root) => roots.push(root),
+            Ok(root) => match sandbox.require_inside(&root) {
+                Ok(()) => roots.push(root),
+                Err(error) => problems.push(error),
+            },
             Err(error) => problems.push(error),
         }
     }
@@ -79,7 +102,7 @@ pub fn execute(request: &Cli, input: &mut impl BufRead, out: &mut impl Write) ->
 
     let roots = dedup_roots(roots);
 
-    // Step 4. Read-only file list. Symlinks are not entered.
+    // Step 5. Read-only file list. Symlinks are not entered.
     let mut actions = match plan::build(&roots) {
         Ok(actions) => actions,
         Err(error) => {
@@ -89,20 +112,21 @@ pub fn execute(request: &Cli, input: &mut impl BufRead, out: &mut impl Write) ->
         }
     };
 
-    // Step 5. Mark sparse or compressed files. Still only reading metadata.
+    // Step 6. Mark sparse or compressed files. Still only reading metadata.
     if let Err(error) = mark_sparse(&mut actions) {
         writeln!(out, "Nothing was changed.").map_err(Error::report)?;
         return Err(error);
     }
 
-    // Step 6. Say which filesystem and, on Linux, the kernel's disk flag.
+    // Step 7. Say which filesystem and, on Linux, the kernel's disk flag.
     write_volume_notes(out, &roots)?;
 
-    // Step 7. Print the plan. Every line says "would".
+    // Step 8. Print the plan. Every line says "would".
     report::write_plan(out, &pattern, &actions)?;
     write_later_details(out, &pattern, &actions)?;
+    write_plan_seal(out, &actions)?;
 
-    // Step 8. One sentence for the read-back, then what a delete would miss.
+    // Step 9. One sentence for the read-back, then what a delete would miss.
     writeln!(out, "{}", readback::later_step()).map_err(Error::report)?;
     writeln!(
         out,
@@ -123,7 +147,7 @@ pub fn execute(request: &Cli, input: &mut impl BufRead, out: &mut impl Write) ->
     .map_err(Error::report)?;
     writeln!(out, "Nothing was changed.").map_err(Error::report)?;
 
-    // Step 9. Stop. Sections 09 and 10 are not called.
+    // Step 10. Stop. Sections 09 and 10 are not called.
     if request.dry_run {
         writeln!(out, "Dry run: nothing was changed.").map_err(Error::report)?;
         let skips = actions.iter().filter(|action| action.is_skip()).count();
@@ -139,6 +163,47 @@ pub fn execute(request: &Cli, input: &mut impl BufRead, out: &mut impl Write) ->
     }
 
     Err(Error::NotInThisVersion { action: "delete" })
+}
+
+fn write_plan_seal(out: &mut impl Write, actions: &[Action]) -> Result<()> {
+    let lines: Vec<String> = actions.iter().map(Action::preview).collect();
+    let text = plan_text::join(&lines);
+    let seal = plan_text::fingerprint(&text);
+    writeln!(
+        out,
+        "Plan fingerprint: {seal} (not a seal; the plan text only, no file contents)."
+    )
+    .map_err(Error::report)?;
+    let journal_lines: Vec<String> = actions
+        .iter()
+        .map(|action| journal::planned(&action.path))
+        .collect();
+    writeln!(
+        out,
+        "Journal: {} line(s) say planned, not done. No journal file is written.",
+        journal_lines.len()
+    )
+    .map_err(Error::report)?;
+    let planned_names: Vec<String> = actions
+        .iter()
+        .map(|action| action.path.display().to_string())
+        .collect();
+    let present_names: Vec<String> = actions
+        .iter()
+        .filter(|action| std::fs::symlink_metadata(&action.path).is_ok())
+        .map(|action| action.path.display().to_string())
+        .collect();
+    let planned_refs: Vec<&str> = planned_names.iter().map(String::as_str).collect();
+    let present_refs: Vec<&str> = present_names.iter().map(String::as_str).collect();
+    let kept = names::still_present(&planned_refs, &present_refs);
+    writeln!(
+        out,
+        "Still in the sandbox: {} of {} named paths.",
+        kept.len(),
+        planned_refs.len()
+    )
+    .map_err(Error::report)?;
+    Ok(())
 }
 
 fn write_volume_notes(out: &mut impl Write, roots: &[PathBuf]) -> Result<()> {

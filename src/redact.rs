@@ -19,6 +19,15 @@ pub fn line(label: &str, path: &Path) -> String {
     format!("{label}  {}", path.display())
 }
 
+/// True when `report` does not contain `secret`.
+///
+/// An empty secret is not a leak. There is no file argument, so this cannot
+/// read a disk. Callers pass a secret they already know, such as a test token.
+#[must_use]
+pub fn keeps_secret(report: &str, secret: &str) -> bool {
+    secret.is_empty() || !report.contains(secret)
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -31,5 +40,11 @@ mod tests {
         assert!(text.contains("id card"));
         assert!(text.contains("/tmp/notes.txt"));
         assert!(!text.contains("EXAMPLE_TOKEN_123"));
+        assert!(super::keeps_secret(&text, "EXAMPLE_TOKEN_123"));
+        assert!(!super::keeps_secret(
+            "token EXAMPLE_TOKEN_123",
+            "EXAMPLE_TOKEN_123"
+        ));
+        assert!(super::keeps_secret("anything", ""));
     }
 }

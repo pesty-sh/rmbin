@@ -267,28 +267,15 @@ pub fn different_device(root: u64, child: u64) -> bool {
 mod tests {
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{classify, different_device, resolve_leaf, Kind};
     use crate::protect::Guard;
-
-    fn temp_dir() -> PathBuf {
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let mut path = std::env::temp_dir();
-        path.push(format!("rmbin-classify-{n}-{nanos}"));
-        fs::create_dir_all(&path).expect("temp");
-        fs::canonicalize(&path).unwrap_or(path)
-    }
+    use crate::sandbox::Scratch;
 
     #[test]
     fn file_directory_and_symlink() {
-        let dir = temp_dir();
+        let scratch = Scratch::new("classify").expect("sandbox");
+        let dir = scratch.path().to_path_buf();
         let file = dir.join("notes.txt");
         fs::write(&file, b"abc").expect("write");
         let sub = dir.join("sub");
@@ -308,12 +295,12 @@ mod tests {
             Kind::Directory { .. }
         ));
         assert_eq!(classify(&link).expect("link"), Kind::Symlink);
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn intermediate_symlink_is_refused() {
-        let dir = temp_dir();
+        let scratch = Scratch::new("classify").expect("sandbox");
+        let dir = scratch.path().to_path_buf();
         let real = dir.join("real");
         fs::create_dir(&real).expect("dir");
         fs::write(real.join("file.txt"), b"secret").expect("write");
@@ -328,12 +315,12 @@ mod tests {
         let text = error.to_string();
         assert!(text.contains("refusing to follow symlink"), "{text}");
         assert_eq!(fs::read(real.join("file.txt")).expect("read"), b"secret");
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn dot_dot_stays_in_the_tree() {
-        let dir = temp_dir();
+        let scratch = Scratch::new("classify").expect("sandbox");
+        let dir = scratch.path().to_path_buf();
         let file = dir.join("notes.txt");
         fs::write(&file, b"abc").expect("write");
         // Build the path as text. On Windows, `Path::join("..")` deletes the
@@ -353,7 +340,6 @@ mod tests {
         via_real.push("notes.txt");
         let resolved = resolve_leaf(&PathBuf::from(via_real), &Guard::load()).expect("resolve");
         assert_eq!(fs::canonicalize(&resolved).expect("canon"), file);
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

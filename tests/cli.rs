@@ -1,7 +1,8 @@
-//! Integration tests. Each one uses a real temporary folder.
+//! Integration tests. Each one uses a scratch folder inside `sandbox/`.
 //!
 //! `CARGO_BIN_EXE_rmbin` is the compiled `rmbin` binary. The library tests in
 //! `src/` check the pattern maths. These tests check what a person sees.
+//! Nothing is created in the system temp directory.
 
 #![forbid(unsafe_code)]
 
@@ -9,59 +10,22 @@ use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+
+use rmbin::sandbox::Scratch;
 
 struct Temp {
-    path: PathBuf,
+    scratch: Scratch,
 }
 
 impl Temp {
     fn new() -> Self {
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let mut path = std::env::temp_dir();
-        path.push(format!("rmbin-cli-{n}-{nanos}"));
-        fs::create_dir_all(&path).expect("temp");
-        let path = fs::canonicalize(&path).unwrap_or(path);
-        Self { path }
+        Self {
+            scratch: Scratch::new("cli").expect("sandbox"),
+        }
     }
 
     fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl Drop for Temp {
-    fn drop(&mut self) {
-        relax(&self.path);
-        let _ = fs::remove_dir_all(&self.path);
-    }
-}
-
-fn relax(path: &Path) {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mode = if path.is_dir() { 0o755 } else { 0o644 };
-        let _ = fs::set_permissions(path, fs::Permissions::from_mode(mode));
-        if let Ok(meta) = fs::symlink_metadata(path) {
-            if meta.is_dir() {
-                if let Ok(entries) = fs::read_dir(path) {
-                    for entry in entries.flatten() {
-                        relax(&entry.path());
-                    }
-                }
-            }
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = path;
+        self.scratch.path()
     }
 }
 
@@ -119,7 +83,8 @@ fn help_and_version() {
 
     let version = run(dir.path(), &["--version"], None);
     assert!(version.status.success());
-    assert!(text(&version.stdout).contains("rmbin 0.0.9"));
+    assert!(text(&version.stdout).contains("rmbin 0.0.10"));
+    assert!(help_text.contains("sandbox"));
 }
 
 #[test]
@@ -659,6 +624,42 @@ fn the_plan_names_the_filesystem_without_writing() {
     );
     assert!(stdout.contains("does not change the disk"));
     assert_eq!(fs::read(&file).expect("kept"), b"abc");
+}
+
+#[test]
+fn a_project_file_outside_the_sandbox_is_left_alone() {
+    let dir = Temp::new();
+    let cargo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+    let before = fs::read(&cargo).expect("read cargo");
+    let output = run(
+        dir.path(),
+        &["--dry-run", cargo.to_str().expect("utf8")],
+        None,
+    );
+    assert!(!output.status.success(), "{}", combined(&output));
+    assert!(combined(&output).contains("outside the sandbox"));
+    assert!(combined(&output).contains("Nothing was changed."));
+    assert!(!combined(&output).contains("Plan."));
+    assert_eq!(fs::read(&cargo).expect("read cargo"), before);
+}
+
+#[test]
+fn a_folder_with_no_project_sandbox_is_refused() {
+    let outside = std::env::temp_dir();
+    let leaked = outside.join("rmbin-should-not-create.txt");
+    let output = run(
+        &outside,
+        &["--dry-run", "rmbin-should-not-create.txt"],
+        None,
+    );
+    let created = leaked.exists();
+    if created {
+        let _ = fs::remove_file(&leaked);
+    }
+    assert!(!created, "the command created a file outside the project");
+    assert!(!output.status.success(), "{}", combined(&output));
+    assert!(combined(&output).contains("no sandbox"));
+    assert!(combined(&output).contains("Nothing was changed."));
 }
 
 fn symlink_file(target: &Path, link: &Path) {

@@ -134,28 +134,14 @@ fn inode_of(meta: &fs::Metadata) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::read;
-
-    fn temp_dir() -> PathBuf {
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let mut path = std::env::temp_dir();
-        path.push(format!("rmbin-id-{n}-{nanos}"));
-        fs::create_dir_all(&path).expect("temp");
-        fs::canonicalize(&path).unwrap_or(path)
-    }
+    use crate::sandbox::Scratch;
 
     #[test]
     fn card_records_length_and_not_the_bytes() {
-        let dir = temp_dir();
+        let scratch = Scratch::new("identity").expect("sandbox");
+        let dir = scratch.path();
         let file = dir.join("notes.txt");
         let secret = b"EXAMPLE_TOKEN_123";
         fs::write(&file, secret).expect("write");
@@ -170,6 +156,5 @@ mod tests {
             assert!(card.ino.is_some());
             assert_eq!(card.links, 1);
         }
-        let _ = fs::remove_dir_all(&dir);
     }
 }
